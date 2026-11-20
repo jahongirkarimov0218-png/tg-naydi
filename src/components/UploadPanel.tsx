@@ -29,7 +29,7 @@ interface UploadPanelProps {
 }
 
 const CONTROL_INPUT_CLASSES =
-  'mt-1.5 h-9 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-950 shadow-xs transition-colors duration-150 focus-visible:border-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950/20';
+  'mt-1.5 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-base font-medium text-zinc-950 shadow-xs transition-colors duration-150 focus-visible:border-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950/20 sm:h-9 sm:text-xs';
 
 export function UploadPanel({
   providerMode,
@@ -80,7 +80,7 @@ export function UploadPanel({
   return (
     <Card className="p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold tracking-tight text-zinc-950">
+        <h2 className="text-sm font-semibold tracking-tight text-balance text-zinc-950">
           1. Загрузка своей базы
         </h2>
         <Button
@@ -89,7 +89,7 @@ export function UploadPanel({
           data-testid="load-sample-btn"
           onClick={onLoadKazanSample}
         >
-          <Sparkles className="h-3.5 w-3.5 text-zinc-600" strokeWidth={1.75} />
+          <Sparkles className="h-3.5 w-3.5 text-zinc-700" strokeWidth={1.75} />
           Пример (Контакты Казани.csv)
         </Button>
       </div>
@@ -98,6 +98,7 @@ export function UploadPanel({
       <div
         role="button"
         tabIndex={0}
+        aria-label={fileName ? `Выбран файл ${fileName}` : 'Перетащи CSV или TXT файл сюда'}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -116,17 +117,20 @@ export function UploadPanel({
             : 'border-zinc-300 bg-zinc-50/60 hover:border-zinc-400 hover:bg-zinc-100/60'
         )}
       >
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-900 shadow-xs">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-900 shadow-xs">
           {fileName ? (
             <FileSpreadsheet className="h-4 w-4" strokeWidth={1.75} />
           ) : (
             <Upload className="h-4 w-4" strokeWidth={1.75} />
           )}
         </div>
-        <p className="mt-3 text-sm font-medium text-zinc-950">
+        <p
+          title={fileName ?? undefined}
+          className="mt-3 max-w-full truncate text-sm font-medium text-zinc-950"
+        >
           {fileName ? fileName : 'Перетащи CSV или TXT файл сюда'}
         </p>
-        <p className="mt-1 text-xs text-zinc-500">
+        <p className="mt-1 max-w-[36ch] text-xs text-pretty text-zinc-600">
           UTF-8 или Windows-1251 (Excel), разделитель «;» или «,», формат номеров любой
         </p>
         <input
@@ -148,12 +152,12 @@ export function UploadPanel({
           data-testid="validation-summary"
           className="mt-4 rounded-xl border border-zinc-200/80 bg-zinc-50/70 p-3.5"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-600">
             <span>
               Кодировка:{' '}
-              <strong className="font-mono font-medium text-zinc-900">{parsed.encoding}</strong> ·
+              <strong className="font-mono font-medium text-zinc-950">{parsed.encoding}</strong> ·
               Разделитель:{' '}
-              <strong className="font-mono font-medium text-zinc-900">
+              <strong className="font-mono font-medium text-zinc-950">
                 {parsed.delimiter === '\n' ? 'построчно' : `«${parsed.delimiter}»`}
               </strong>
             </span>
@@ -163,7 +167,7 @@ export function UploadPanel({
                 <select
                   value={selectedColumn}
                   onChange={(e) => onColumnChange(e.target.value)}
-                  className="h-7 rounded-md border border-zinc-200 bg-white px-2 text-xs font-medium text-zinc-900 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950/20"
+                  className="h-8 max-w-[160px] truncate rounded-md border border-zinc-200 bg-white px-2 text-xs font-medium text-zinc-950 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950/20 sm:h-7"
                 >
                   {parsed.headers.map((h) => (
                     <option key={h} value={h}>
@@ -176,45 +180,43 @@ export function UploadPanel({
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-lg border border-zinc-200/80 bg-white p-2.5 text-center">
-              <div className="text-base font-semibold tracking-tight text-zinc-950 tabular-nums">
+            <div className="min-w-0 rounded-lg border border-zinc-200/80 bg-white p-2.5 text-center">
+              <div className="truncate text-base font-semibold tracking-tight text-zinc-950 tabular-nums">
                 {parsed.totalRows}
               </div>
-              <div className="mt-0.5 text-[11px] text-zinc-500">всего строк</div>
+              <div className="mt-0.5 text-xs text-zinc-600">всего строк</div>
             </div>
-            <div className="rounded-lg border border-zinc-200/80 bg-white p-2.5 text-center">
-              <div className="text-base font-semibold tracking-tight text-emerald-700 tabular-nums">
+            <div className="min-w-0 rounded-lg border border-zinc-200/80 bg-white p-2.5 text-center">
+              <div className="truncate text-base font-semibold tracking-tight text-emerald-700 tabular-nums">
                 {parsed.uniquePhones.length}
               </div>
-              <div className="mt-0.5 text-[11px] text-zinc-500">уникальных</div>
+              <div className="mt-0.5 text-xs text-zinc-600">уникальных</div>
             </div>
-            <div className="rounded-lg border border-zinc-200/80 bg-white p-2.5 text-center">
-              <div className="text-base font-semibold tracking-tight text-zinc-700 tabular-nums">
+            <div className="min-w-0 rounded-lg border border-zinc-200/80 bg-white p-2.5 text-center">
+              <div className="truncate text-base font-semibold tracking-tight text-zinc-700 tabular-nums">
                 {parsed.duplicatesRemoved}
               </div>
-              <div className="mt-0.5 text-[11px] text-zinc-500">дублей убрано</div>
+              <div className="mt-0.5 text-xs text-zinc-600">дублей убрано</div>
             </div>
-            <div className="rounded-lg border border-zinc-200/80 bg-white p-2.5 text-center">
+            <div className="min-w-0 rounded-lg border border-zinc-200/80 bg-white p-2.5 text-center">
               <div
                 className={cn(
-                  'text-base font-semibold tracking-tight tabular-nums',
-                  parsed.invalidRows > 0 ? 'text-amber-700' : 'text-zinc-700'
+                  'truncate text-base font-semibold tracking-tight tabular-nums',
+                  parsed.invalidRows > 0 ? 'text-amber-800' : 'text-zinc-700'
                 )}
               >
                 {parsed.invalidRows}
               </div>
-              <div className="mt-0.5 text-[11px] text-zinc-500">некорректных</div>
+              <div className="mt-0.5 text-xs text-zinc-600">некорректных</div>
             </div>
           </div>
         </div>
       )}
 
       {/* Batch & region settings — keep exact number input order: 1st batchSize, 2nd pauseMs */}
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-2.5">
-        <label className="block min-w-0">
-          <span className="block truncate text-[11px] font-medium text-zinc-500">
-            Страна по умолч.
-          </span>
+      <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+        <label className="col-span-2 block min-w-0 sm:col-span-1">
+          <span className="block text-xs font-medium text-zinc-600">Страна по умолч.</span>
           <select
             data-testid="country-select"
             value={defaultCountry}
@@ -231,7 +233,7 @@ export function UploadPanel({
         </label>
 
         <label className="block min-w-0">
-          <span className="block truncate text-[11px] font-medium text-zinc-500">Пачка (шт)</span>
+          <span className="block text-xs font-medium text-zinc-600">Пачка (шт)</span>
           <input
             type="number"
             min={1}
@@ -243,7 +245,7 @@ export function UploadPanel({
         </label>
 
         <label className="block min-w-0">
-          <span className="block truncate text-[11px] font-medium text-zinc-500">Пауза (мс)</span>
+          <span className="block text-xs font-medium text-zinc-600">Пауза (мс)</span>
           <input
             type="number"
             min={isLive ? 15000 : 100}
@@ -259,6 +261,7 @@ export function UploadPanel({
       {errorText && (
         <div
           data-testid="upload-error"
+          role="alert"
           className="mt-3 rounded-lg border border-red-200 bg-red-50/80 px-3 py-2 text-xs font-medium text-red-700"
         >
           {errorText}

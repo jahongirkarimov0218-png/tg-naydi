@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { parseCsvBuffer, type ParsedCsvResult } from '@/lib/csv-parser';
 import { KAZAN_SAMPLE_CSV_BYTES, KAZAN_SAMPLE_FILENAME } from '@/lib/sample-data';
 import type { ProviderMode, StorageMode, SupportedCountry } from '@/lib/types';
@@ -53,6 +53,17 @@ export function TgNaydiWorkspace({
     deleteJob,
     changeFilter,
   } = useTgNaydiJob(initialProviderMode, initialWorkerOnline);
+
+  useEffect(() => {
+    if (!showOperatorModal) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowOperatorModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showOperatorModal, setShowOperatorModal]);
 
   const reparse = (bytes: Uint8Array, country: SupportedCountry, colOverride?: string) => {
     const result = parseCsvBuffer(bytes, country, colOverride);
@@ -109,10 +120,10 @@ export function TgNaydiWorkspace({
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
         <section className="max-w-3xl">
-          <h1 className="text-3xl font-semibold tracking-[-0.03em] text-zinc-950 sm:text-5xl sm:leading-[1.08]">
+          <h1 className="text-3xl font-semibold tracking-[-0.03em] text-balance text-zinc-950 sm:text-5xl sm:leading-[1.08]">
             Подготовь базу к рассылке в Telegram
           </h1>
-          <p className="mt-4 max-w-2xl text-base leading-relaxed text-zinc-500 sm:text-[17px]">
+          <p className="mt-4 max-w-2xl text-base leading-relaxed text-pretty text-zinc-600 sm:text-[17px]">
             Загружаешь свою базу с номерами, получаешь тот же файл с username и типом аккаунта.
             Дальше писать можно по username, а не по номерам: меньше ошибок и ниже риск ограничений.
           </p>
@@ -167,23 +178,42 @@ export function TgNaydiWorkspace({
       </main>
 
       {showOperatorModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-[2px]">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-[2px]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowOperatorModal(false);
+          }}
+        >
           <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="operator-modal-title"
             onSubmit={(e) => void handleOperatorLogin(e)}
             className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xs"
           >
-            <h3 className="text-base font-semibold tracking-tight text-zinc-950">Ключ оператора</h3>
-            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+            <h3
+              id="operator-modal-title"
+              className="text-base font-semibold tracking-tight text-balance text-zinc-950"
+            >
+              Ключ оператора
+            </h3>
+            <p className="mt-1 text-xs leading-relaxed text-pretty text-zinc-600">
               Защищает подключённый Telegram-аккаунт от запусков посторонними посетителями.
             </p>
             <input
               type="password"
+              autoFocus
+              aria-label="Ключ оператора"
               value={operatorKey}
               onChange={(e) => setOperatorKey(e.target.value)}
               placeholder="Введите OPERATOR_ACCESS_KEY"
-              className="mt-4 h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-950 shadow-xs transition-colors duration-150 placeholder:text-zinc-400 focus-visible:border-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950/20"
+              className="mt-4 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-base text-zinc-950 shadow-xs transition-colors duration-150 placeholder:text-zinc-500 focus-visible:border-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950/20 sm:h-9 sm:text-sm"
             />
-            {operatorError && <p className="mt-2 text-xs text-red-600">{operatorError}</p>}
+            {operatorError && (
+              <p role="alert" className="mt-2 text-xs text-red-700">
+                {operatorError}
+              </p>
+            )}
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="outline" size="md" onClick={() => setShowOperatorModal(false)}>
                 Отмена
