@@ -1,19 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-
-function encodeWindows1251(text: string): Buffer {
-  const bytes: number[] = [];
-  for (const ch of text) {
-    const code = ch.charCodeAt(0);
-    if (code < 0x80) bytes.push(code);
-    else if (code >= 0x0410 && code <= 0x044f) bytes.push(code - 0x0410 + 0xc0);
-    else if (code === 0x0401) bytes.push(0xa8);
-    else if (code === 0x0451) bytes.push(0xb8);
-    else bytes.push(0x3f);
-  }
-  return Buffer.from(bytes);
-}
+import { encodeWindows1251 } from '../helpers/cp1251';
 
 test.describe('TG Naydi End-to-End Browser Verification', () => {
   test('uploads dirty Windows-1251 CSV, pauses, survives F5 reload, completes, exports Excel BOM CSV, and deletes PII', async ({

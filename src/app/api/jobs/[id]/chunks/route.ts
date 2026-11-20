@@ -1,54 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { extractJobToken, verifyJobToken } from '@/lib/auth';
+import { parseJsonBody, withAuthorizedJob, type JobRouteContext } from '@/lib/api-helpers';
 import { appendUniquePhonesToJob, MAX_CHUNK_SIZE, toPublicJobView } from '@/lib/job-engine';
-import { getJobStore } from '@/lib/job-store';
-
-type RouteContext = { params: Promise<{ id: string }> };
 
 const ChunkSchema = z.object({
   phones: z.array(z.string()).min(1).max(MAX_CHUNK_SIZE),
 });
 
-export async function POST(req: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const store = getJobStore();
-  if (!store) {
-    return NextResponse.json({ code: 'STORAGE_NOT_CONFIGURED' }, { status: 503 });
-  }
+export async function POST(req: NextRequest, context: JobRouteContext): Promise<NextResponse> {
+  return withAuthorizedJob(req, context, async ({ job, store }) => {
+    const parsedJson = await parseJsonBody(req);
+    if (!parsedJson.ok) return parsedJson.response;
 
-  const { id } = await context.params;
-  const job = await store.getJob(id);
-  if (!job) {
-    return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-  }
+    const parsed = ChunkSchema.safeParse(parsedJson.data);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: `Invalid chunk payload (1..${MAX_CHUNK_SIZE} E.164 phones expected)` },
+        { status: 400 }
+      );
+    }
 
-  if (!verifyJobToken(job.tokenHash, extractJobToken(req, id))) {
-    return NextResponse.json({ error: 'Unauthorized job access' }, { status: 401 });
-  }
-
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
-  }
-
-  const parsed = ChunkSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: `Invalid chunk payload (1..${MAX_CHUNK_SIZE} E.164 phones expected)` },
-      { status: 400 }
-    );
-  }
-
-  try {
-    const { added } = appendUniquePhonesToJob(job, parsed.data.phones);
-    await store.saveJob(job);
-    return NextResponse.json({ added, job: toPublicJobView(job) });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to append chunk' },
-      { status: 400 }
-    );
-  }
+    try {
+      const { added } = appendUniquePhonesToJob(job, parsed.data.phones);
+      await store.saveJob(job);
+      return NextResponse.json({ added, job: toPublicJobView(job) });
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : 'Failed to append chunk' },
+        { status: 400 }
+      );
+    }
+  });
 }

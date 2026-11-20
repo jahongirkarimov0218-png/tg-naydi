@@ -7,6 +7,7 @@ import {
   setJobTokenCookie,
   verifyOperatorAccess,
 } from '@/lib/auth';
+import { parseJsonBody, storageUnconfiguredResponse } from '@/lib/api-helpers';
 import { createNewJobRecord, toPublicJobView } from '@/lib/job-engine';
 import { getJobStore } from '@/lib/job-store';
 import { logInfo } from '@/lib/logger';
@@ -23,16 +24,7 @@ const CreateJobSchema = z.object({
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const store = getJobStore();
-  if (!store) {
-    return NextResponse.json(
-      {
-        code: 'STORAGE_NOT_CONFIGURED',
-        error:
-          'На Vercel не подключён Upstash Redis (UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN). Подключите бесплатный Upstash Redis для надёжного сохранения прогресса.',
-      },
-      { status: 503 }
-    );
-  }
+  if (!store) return storageUnconfiguredResponse(true);
 
   if (!verifyOperatorAccess(req)) {
     return NextResponse.json(
@@ -44,14 +36,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
-  }
+  const parsedJson = await parseJsonBody(req);
+  if (!parsedJson.ok) return parsedJson.response;
 
-  const parsed = CreateJobSchema.safeParse(body);
+  const parsed = CreateJobSchema.safeParse(parsedJson.data);
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'Validation failed', details: parsed.error.flatten() },

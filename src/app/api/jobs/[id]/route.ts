@@ -1,77 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractJobToken, getJobCookieName, verifyJobToken } from '@/lib/auth';
-import { toPublicJobView } from '@/lib/job-engine';
-import { getJobStore } from '@/lib/job-store';
+import { getJobCookieName } from '@/lib/auth';
+import { withAuthorizedJob, type JobRouteContext } from '@/lib/api-helpers';
+import { toPublicJobView, type PublicItemFilter } from '@/lib/job-engine';
 import { logInfo } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
-type RouteContext = { params: Promise<{ id: string }> };
+const VALID_FILTERS = new Set<PublicItemFilter>(['all', 'person', 'channel', 'bot', 'found']);
 
-export async function GET(req: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const store = getJobStore();
-  if (!store) {
-    return NextResponse.json({ code: 'STORAGE_NOT_CONFIGURED' }, { status: 503 });
-  }
+function parseQueryInt(raw: string | null, fallback: number): number {
+  const num = Number(raw ?? fallback);
+  return Number.isFinite(num) ? num : fallback;
+}
 
-  const { id } = await context.params;
-  const job = await store.getJob(id);
-  if (!job) {
-    return NextResponse.json({ error: 'Job not found or expired' }, { status: 404 });
-  }
+function parseFilter(raw: string | null): PublicItemFilter {
+  return raw && VALID_FILTERS.has(raw as PublicItemFilter) ? (raw as PublicItemFilter) : 'all';
+}
 
-  const rawToken = extractJobToken(req, id);
-  if (!verifyJobToken(job.tokenHash, rawToken)) {
-    return NextResponse.json({ error: 'Unauthorized job access' }, { status: 401 });
-  }
-
-  const url = req.nextUrl;
-  const offset = Number(url.searchParams.get('offset') ?? '0');
-  const limit = Number(url.searchParams.get('limit') ?? '200');
-  const filterParam = url.searchParams.get('filter');
-  const filter =
-    filterParam === 'person' ||
-    filterParam === 'channel' ||
-    filterParam === 'bot' ||
-    filterParam === 'found'
-      ? filterParam
-      : 'all';
-
-  return NextResponse.json({
-    job: toPublicJobView(job, {
-      offset: Number.isFinite(offset) ? offset : 0,
-      limit: Number.isFinite(limit) ? limit : 200,
-      filter,
-    }),
+export async function GET(req: NextRequest, context: JobRouteContext): Promise<NextResponse> {
+  return withAuthorizedJob(req, context, async ({ job }) => {
+    const params = req.nextUrl.searchParams;
+    return NextResponse.json({
+      job: toPublicJobView(job, {
+        offset: parseQueryInt(params.get('offset'), 0),
+        limit: parseQueryInt(params.get('limit'), 200),
+        filter: parseFilter(params.get('filter')),
+      }),
+    });
   });
 }
 
-export async function DELETE(req: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const store = getJobStore();
-  if (!store) {
-    return NextResponse.json({ code: 'STORAGE_NOT_CONFIGURED' }, { status: 503 });
-  }
-
-  const { id } = await context.params;
-  const job = await store.getJob(id);
-  if (!job) {
-    return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-  }
-
-  const rawToken = extractJobToken(req, id);
-  if (!verifyJobToken(job.tokenHash, rawToken)) {
-    return NextResponse.json({ error: 'Unauthorized job access' }, { status: 401 });
-  }
-
-  await store.deleteJob(id);
-  logInfo('Deleted job and PII data immediately', { jobId: id });
-  const res = NextResponse.json({ deleted: true });
-  res.cookies.set(getJobCookieName(id), '', {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 0,
+export async function DELETE(req: NextRequest, context: JobRouteContext): Promise<NextResponse> {
+  return withAuthorizedJob(req, context, async ({ id, store }) => {
+    await store.deleteJob(id);
+    logInfo('Deleted job and PII data immediately', { jobId: id });
+    const res = NextResponse.json({ deleted: true });
+    res.cookies.set(getJobCookieName(id), '', {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 0,
+    });
+    return res;
   });
-  return res;
 }

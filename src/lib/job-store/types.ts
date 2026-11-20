@@ -2,6 +2,32 @@ import type { Job, RecentJobMetrics } from '@/lib/types';
 
 export const JOB_TTL_SECONDS = 86_400; // 24 hours PII auto-expiry
 
+export function isJobExpired(job: Job, nowMs: number = Date.now()): boolean {
+  return Boolean(job.expiresAt && new Date(job.expiresAt).getTime() <= nowMs);
+}
+
+export function isActiveLiveJob(job: Job): boolean {
+  return (
+    job.providerMode === 'LIVE_MTPROTO' &&
+    (job.status === 'queued' || job.status === 'running' || job.status === 'rate_limited')
+  );
+}
+
+export function buildRecentJobMetrics(
+  completed: number,
+  failed: number,
+  rateLimited: number
+): RecentJobMetrics {
+  const total = completed + failed;
+  return {
+    recentJobsTotal: total,
+    recentJobsCompleted: completed,
+    recentJobsFailed: failed,
+    recentFloodWaits: rateLimited,
+    errorRate: total > 0 ? failed / total : 0,
+  };
+}
+
 export interface JobStore {
   getJob(id: string): Promise<Job | null>;
   saveJob(job: Job): Promise<void>;

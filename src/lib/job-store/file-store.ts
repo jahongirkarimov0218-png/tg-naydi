@@ -2,7 +2,12 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Job, RecentJobMetrics } from '@/lib/types';
-import type { JobStore } from '@/lib/job-store/types';
+import {
+  buildRecentJobMetrics,
+  isActiveLiveJob,
+  isJobExpired,
+  type JobStore,
+} from '@/lib/job-store/types';
 
 interface LockRecord {
   owner: string;
@@ -44,6 +49,14 @@ export class FileJobStore implements JobStore {
     return path.join(this.baseDir, `lock-${safe}.json`);
   }
 
+  private async readJsonFile<T>(filePath: string): Promise<T | null> {
+    try {
+      return JSON.parse(await fs.readFile(filePath, 'utf-8')) as T;
+    } catch {
+      return null;
+    }
+  }
+
   private async atomicWriteJson(filePath: string, data: unknown): Promise<void> {
     await this.ensureDir();
     const tmpPath = `${filePath}.${crypto.randomBytes(6).toString('hex')}.tmp`;
@@ -51,20 +64,29 @@ export class FileJobStore implements JobStore {
     await fs.rename(tmpPath, filePath);
   }
 
+  private async readTimestamp(fileName: string): Promise<number | null> {
+    const parsed = await this.readJsonFile<{ timestampMs?: number }>(path.join(this.baseDir, fileName));
+    return typeof parsed?.timestampMs === 'number' ? parsed.timestampMs : null;
+  }
+
+  private async writeTimestamp(fileName: string, timestampMs: number): Promise<void> {
+    await this.atomicWriteJson(path.join(this.baseDir, fileName), { timestampMs });
+  }
+
+  private async readMetricsRecord(): Promise<MetricsRecord> {
+    const existing = await this.readJsonFile<MetricsRecord>(path.join(this.baseDir, 'metrics.json'));
+    return existing ?? { completed: 0, failed: 0, rateLimited: 0 };
+  }
+
   async getJob(id: string): Promise<Job | null> {
     if (!SAFE_ID_RE.test(id)) return null;
-    const filePath = this.jobPath(id);
-    try {
-      const raw = await fs.readFile(filePath, 'utf-8');
-      const job = JSON.parse(raw) as Job;
-      if (job.expiresAt && new Date(job.expiresAt).getTime() <= Date.now()) {
-        await this.deleteJob(id);
-        return null;
-      }
-      return job;
-    } catch {
+    const job = await this.readJsonFile<Job>(this.jobPath(id));
+    if (!job) return null;
+    if (isJobExpired(job)) {
+      await this.deleteJob(id);
       return null;
     }
+    return job;
   }
 
   async saveJob(job: Job): Promise<void> {
@@ -82,16 +104,10 @@ export class FileJobStore implements JobStore {
     const filePath = this.lockPath(name);
     const now = Date.now();
 
-    // Check existing lock and remove if expired
-    try {
-      const existingRaw = await fs.readFile(filePath, 'utf-8');
-      const existing = JSON.parse(existingRaw) as LockRecord;
-      if (existing.expiresAt > now) {
-        return null;
-      }
+    const existing = await this.readJsonFile<LockRecord>(filePath);
+    if (existing) {
+      if (existing.expiresAt > now) return null;
       await fs.rm(filePath, { force: true });
-    } catch {
-      // No lock file or unreadable
     }
 
     const owner = crypto.randomUUID();
@@ -106,14 +122,9 @@ export class FileJobStore implements JobStore {
 
   private async releaseNamedLock(name: string, owner: string): Promise<void> {
     const filePath = this.lockPath(name);
-    try {
-      const raw = await fs.readFile(filePath, 'utf-8');
-      const existing = JSON.parse(raw) as LockRecord;
-      if (existing.owner === owner) {
-        await fs.rm(filePath, { force: true });
-      }
-    } catch {
-      // Already released
+    const existing = await this.readJsonFile<LockRecord>(filePath);
+    if (existing?.owner === owner) {
+      await fs.rm(filePath, { force: true });
     }
   }
 
@@ -133,13 +144,8 @@ export class FileJobStore implements JobStore {
     const jobs: Job[] = [];
     for (const file of files) {
       if (!file.startsWith('job-') || !file.endsWith('.json')) continue;
-      const id = file.slice(4, -5);
-      const job = await this.getJob(id);
-      if (
-        job &&
-        job.providerMode === 'LIVE_MTPROTO' &&
-        (job.status === 'queued' || job.status === 'running' || job.status === 'rate_limited')
-      ) {
+      const job = await this.getJob(file.slice(4, -5));
+      if (job && isActiveLiveJob(job)) {
         jobs.push(job);
       }
     }
@@ -156,66 +162,31 @@ export class FileJobStore implements JobStore {
   }
 
   async setWorkerHeartbeat(timestampMs: number): Promise<void> {
-    await this.atomicWriteJson(path.join(this.baseDir, 'worker-heartbeat.json'), {
-      timestampMs,
-    });
+    await this.writeTimestamp('worker-heartbeat.json', timestampMs);
   }
 
   async getWorkerHeartbeat(): Promise<number | null> {
-    try {
-      const raw = await fs.readFile(path.join(this.baseDir, 'worker-heartbeat.json'), 'utf-8');
-      const parsed = JSON.parse(raw) as { timestampMs?: number };
-      return typeof parsed.timestampMs === 'number' ? parsed.timestampMs : null;
-    } catch {
-      return null;
-    }
+    return this.readTimestamp('worker-heartbeat.json');
   }
 
   async setSessionCooldownUntil(timestampMs: number): Promise<void> {
-    await this.atomicWriteJson(path.join(this.baseDir, 'session-cooldown.json'), {
-      timestampMs,
-    });
+    await this.writeTimestamp('session-cooldown.json', timestampMs);
   }
 
   async getSessionCooldownUntil(): Promise<number | null> {
-    try {
-      const raw = await fs.readFile(path.join(this.baseDir, 'session-cooldown.json'), 'utf-8');
-      const parsed = JSON.parse(raw) as { timestampMs?: number };
-      return typeof parsed.timestampMs === 'number' ? parsed.timestampMs : null;
-    } catch {
-      return null;
-    }
+    return this.readTimestamp('session-cooldown.json');
   }
 
   async recordJobOutcome(outcome: 'completed' | 'failed' | 'rate_limited'): Promise<void> {
-    const filePath = path.join(this.baseDir, 'metrics.json');
-    let current: MetricsRecord = { completed: 0, failed: 0, rateLimited: 0 };
-    try {
-      current = JSON.parse(await fs.readFile(filePath, 'utf-8')) as MetricsRecord;
-    } catch {
-      // initial
-    }
+    const current = await this.readMetricsRecord();
     if (outcome === 'completed') current.completed += 1;
-    if (outcome === 'failed') current.failed += 1;
-    if (outcome === 'rate_limited') current.rateLimited += 1;
-    await this.atomicWriteJson(filePath, current);
+    else if (outcome === 'failed') current.failed += 1;
+    else current.rateLimited += 1;
+    await this.atomicWriteJson(path.join(this.baseDir, 'metrics.json'), current);
   }
 
   async getRecentMetrics(): Promise<RecentJobMetrics> {
-    const filePath = path.join(this.baseDir, 'metrics.json');
-    let current: MetricsRecord = { completed: 0, failed: 0, rateLimited: 0 };
-    try {
-      current = JSON.parse(await fs.readFile(filePath, 'utf-8')) as MetricsRecord;
-    } catch {
-      // initial
-    }
-    const total = current.completed + current.failed;
-    return {
-      recentJobsTotal: total,
-      recentJobsCompleted: current.completed,
-      recentJobsFailed: current.failed,
-      recentFloodWaits: current.rateLimited,
-      errorRate: total > 0 ? current.failed / total : 0,
-    };
+    const current = await this.readMetricsRecord();
+    return buildRecentJobMetrics(current.completed, current.failed, current.rateLimited);
   }
 }

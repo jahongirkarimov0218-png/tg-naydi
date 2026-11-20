@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { hashSecret, setOperatorCookie, timingSafeEqualHex } from '@/lib/auth';
+import { parseJsonBody } from '@/lib/api-helpers';
 
 const OperatorAuthSchema = z.object({
   key: z.string().min(1),
@@ -15,14 +16,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
-  }
+  const parsedJson = await parseJsonBody(req);
+  if (!parsedJson.ok) return parsedJson.response;
 
-  const parsed = OperatorAuthSchema.safeParse(body);
+  const parsed = OperatorAuthSchema.safeParse(parsedJson.data);
   if (!parsed.success) {
     return NextResponse.json({ error: 'Operator key is required' }, { status: 400 });
   }

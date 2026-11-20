@@ -31,19 +31,7 @@ import {
 import { evaluateHealthAnomaly } from '../scripts/monitoring/anomaly_detector.mjs';
 import { POST as createJobPOST } from '@/app/api/jobs/route';
 import { GET as getJobGET } from '@/app/api/jobs/[id]/route';
-
-function encodeCp1251(text: string): Uint8Array {
-  const out: number[] = [];
-  for (const ch of text) {
-    const code = ch.charCodeAt(0);
-    if (code < 0x80) out.push(code);
-    else if (code >= 0x0410 && code <= 0x044f) out.push(code - 0x0410 + 0xc0);
-    else if (code === 0x0401) out.push(0xa8);
-    else if (code === 0x0451) out.push(0xb8);
-    else out.push(0x3f);
-  }
-  return new Uint8Array(out);
-}
+import { encodeWindows1251 as encodeCp1251 } from '../tests/helpers/cp1251';
 
 describe('TG Naydi Domain & Policy Evals (15 real cases)', () => {
   let tmpDir: string;
