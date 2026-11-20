@@ -184,4 +184,84 @@ describe('MtprotoLookupProvider (GramJS contract tests)', () => {
     expect(res.items['+79051110002']).toBeUndefined();
     expect(deleteContacts).toHaveBeenCalledTimes(1);
   });
+
+  it('handles importContacts FloodWait message, rethrows non-flood errors, marks getFullUser errors, and tolerates deleteContacts failure', async () => {
+    const floodOnImport: MtprotoClientLike = {
+      importContacts: vi.fn().mockRejectedValue({ errorMessage: 'FLOOD_WAIT_19' }),
+      getPersonalChannelUsername: vi.fn(),
+      deleteContacts: vi.fn(),
+    };
+    const p1 = new MtprotoLookupProvider(floodOnImport);
+    expect(await p1.lookupBatch(['+79051110001'])).toEqual({ items: {}, floodWaitSeconds: 19 });
+    expect(floodOnImport.deleteContacts).not.toHaveBeenCalled();
+
+    const fatalOnImport: MtprotoClientLike = {
+      importContacts: vi.fn().mockRejectedValue(new Error('AUTH_KEY_UNREGISTERED')),
+      getPersonalChannelUsername: vi.fn(),
+      deleteContacts: vi.fn(),
+    };
+    await expect(new MtprotoLookupProvider(fatalOnImport).lookupBatch(['+79051110001'])).rejects.toThrow(
+      'AUTH_KEY_UNREGISTERED'
+    );
+
+    // Zero seconds or string throw must NOT be misclassified as FLOOD_WAIT
+    const zeroSecFlood: MtprotoClientLike = {
+      importContacts: vi.fn().mockRejectedValue({ seconds: 0, message: 'NOT_FLOOD' }),
+      getPersonalChannelUsername: vi.fn(),
+      deleteContacts: vi.fn(),
+    };
+    await expect(new MtprotoLookupProvider(zeroSecFlood).lookupBatch(['+79051110001'])).rejects.toEqual({
+      seconds: 0,
+      message: 'NOT_FLOOD',
+    });
+
+    // Empty import result does NOT call deleteContacts
+    const emptyClient: MtprotoClientLike = {
+      importContacts: vi.fn().mockResolvedValue([]),
+      getPersonalChannelUsername: vi.fn(),
+      deleteContacts: vi.fn(),
+    };
+    expect(await new MtprotoLookupProvider(emptyClient).lookupBatch(['+79051110001'])).toEqual({
+      items: { '+79051110001': { status: 'not_found_or_hidden' } },
+    });
+    expect(emptyClient.deleteContacts).not.toHaveBeenCalled();
+
+    // Fractional seconds ceils cleanly, and bots skip getPersonalChannelUsername
+    const botClient: MtprotoClientLike = {
+      importContacts: vi.fn().mockResolvedValue([
+        { clientId: '0', phone: '+79051110001', userId: '1', accessHash: 'a1', username: 'bot_u', bot: true },
+        { clientId: '1', phone: '+79051110002', userId: '2', accessHash: 'a2', username: 'human_u', bot: false },
+      ]),
+      getPersonalChannelUsername: vi.fn().mockRejectedValue({ seconds: 1.2 }),
+      deleteContacts: vi.fn().mockResolvedValue(undefined),
+    };
+    const botRes = await new MtprotoLookupProvider(botClient).lookupBatch(['+79051110001', '+79051110002']);
+    expect(botClient.getPersonalChannelUsername).toHaveBeenCalledTimes(1);
+    expect(botRes.floodWaitSeconds).toBe(2);
+    expect(botRes.items['+79051110001']).toEqual({ status: 'found', username: '@bot_u', accountType: 'bot' });
+
+    const partialErrorClient: MtprotoClientLike = {
+      importContacts: vi.fn().mockResolvedValue([
+        { clientId: '0', phone: '+79051110001', userId: '1', accessHash: 'a1', username: '  @@clean_u ', bot: false },
+        { clientId: '1', phone: '+79051110002', userId: '2', accessHash: 'a2', username: 'ok_u', bot: false },
+        { clientId: '2', phone: '+79051110003', userId: '3', accessHash: 'a3', username: undefined, bot: true },
+      ]),
+      getPersonalChannelUsername: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('RPC_TIMEOUT'))
+        .mockResolvedValueOnce('  @@linked_ch '),
+      deleteContacts: vi.fn().mockRejectedValue(new Error('cleanup failed')),
+    };
+    const p3 = new MtprotoLookupProvider(partialErrorClient);
+    const out = await p3.lookupBatch(['+79051110001', '+79051110002', '+79051110003']);
+    expect(out.items['+79051110001']).toEqual({ status: 'error', errorCode: 'FULL_USER_LOOKUP_FAILED' });
+    expect(out.items['+79051110002']).toEqual({
+      status: 'found',
+      username: '@linked_ch',
+      accountType: 'channel',
+      personalUsername: '@ok_u',
+      linkedChannel: '@linked_ch',
+    });
+    expect(out.items['+79051110003']).toEqual({ status: 'found_no_username', accountType: 'person' });
+  });
 });

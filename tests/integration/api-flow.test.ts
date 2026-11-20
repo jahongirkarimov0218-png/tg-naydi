@@ -329,4 +329,50 @@ describe('TG Naydi API end-to-end integration flow', () => {
     const errBody = await createRes.json();
     expect(errBody.code).toBe('STORAGE_NOT_CONFIGURED');
   });
+
+  it('reports ok health with live worker heartbeat and rejects malformed API requests cleanly', async () => {
+    const healthyRes = await healthGET();
+    expect(healthyRes.status).toBe(200);
+    const healthy = await healthyRes.json();
+    expect(healthy.status).toBe('ok');
+    expect(healthy.storageMode).toBe('file');
+    expect(healthy.workerOnline).toBe(false);
+
+    // Operator endpoint error paths
+    expect(
+      (await operatorPOST(new NextRequest('http://localhost/api/auth/operator', { method: 'POST', body: '{}' }))).status
+    ).toBe(503);
+    process.env.OPERATOR_ACCESS_KEY = 'real-op-key';
+    expect(
+      (await operatorPOST(new NextRequest('http://localhost/api/auth/operator', { method: 'POST', body: 'not-json' }))).status
+    ).toBe(400);
+    expect(
+      (await operatorPOST(new NextRequest('http://localhost/api/auth/operator', { method: 'POST', body: JSON.stringify({ key: '' }) }))).status
+    ).toBe(400);
+    expect(
+      (await operatorPOST(new NextRequest('http://localhost/api/auth/operator', { method: 'POST', body: JSON.stringify({ key: 'wrong' }) }))).status
+    ).toBe(401);
+
+    // Malformed create job body & starting 0-item job
+    expect(
+      (await createJobPOST(new NextRequest('http://localhost/api/jobs', { method: 'POST', body: 'bad-json' }))).status
+    ).toBe(400);
+    const emptyJobRes = await createJobPOST(
+      new NextRequest('http://localhost/api/jobs', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fileName: 'empty.csv' }),
+      })
+    );
+    const cookie = extractCookieHeader(emptyJobRes);
+    const { job } = await emptyJobRes.json();
+    expect(
+      (
+        await startPOST(
+          new NextRequest(`http://localhost/api/jobs/${job.id}/start`, { method: 'POST', headers: { cookie } }),
+          { params: Promise.resolve({ id: job.id }) }
+        )
+      ).status
+    ).toBe(400);
+  });
 });

@@ -19,38 +19,24 @@ export interface ParsedCsvResult {
   invalidRows: number;
 }
 
-const PHONE_HEADER_RE =
-  /(?:^|[\s._/-])(?:phone|телефон|номер|тел|mobile|мобил|tel)(?:$|[\s._/-])|phone|телефон|номер|мобил/i;
+const PHONE_HEADER_RE = /phone|телефон|номер|мобил|(?<![a-zа-яё])(?:tel|тел)(?![a-zа-яё])/i;
 
 export function decodeCsvBytes(bytes: Uint8Array): DecodedCsv {
-  // Strip UTF-8 BOM if present
-  const hasUtf8Bom =
-    bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
-  const slice = hasUtf8Bom ? bytes.subarray(3) : bytes;
-
   try {
-    const utf8 = new TextDecoder('utf-8', { fatal: true }).decode(slice);
-    return { text: utf8, encoding: 'utf-8' };
+    // TextDecoder('utf-8', { fatal: true }) strips UTF-8 BOM natively and rejects invalid CP1251 bytes
+    return { text: new TextDecoder('utf-8', { fatal: true }).decode(bytes), encoding: 'utf-8' };
   } catch {
-    const cp1251 = new TextDecoder('windows-1251').decode(bytes);
-    return { text: cp1251, encoding: 'windows-1251' };
+    return { text: new TextDecoder('windows-1251').decode(bytes), encoding: 'windows-1251' };
   }
 }
 
-function detectDelimiter(sampleText: string): string {
-  const firstLines = sampleText
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .slice(0, 5);
-  if (firstLines.length === 0) return ',';
-
-  const candidates = [';', ',', '\t'];
+function detectDelimiter(lines: string[]): string {
+  const sample = lines.slice(0, 5);
   let best = ',';
   let bestScore = 0;
 
-  for (const delim of candidates) {
-    const counts = firstLines.map((line) => line.split(delim).length - 1);
+  for (const delim of [';', ',', '\t']) {
+    const counts = sample.map((line) => line.split(delim).length - 1);
     const minCount = Math.min(...counts);
     const total = counts.reduce((acc, n) => acc + n, 0);
     if (minCount > 0 && total > bestScore) {
@@ -61,26 +47,28 @@ function detectDelimiter(sampleText: string): string {
   return best;
 }
 
+function scoreColumn(
+  header: string,
+  sample: Record<string, string>[],
+  defaultCountry: SupportedCountry
+) {
+  const nonEmpty = sample.map((r) => (r[header] ?? '').trim()).filter(Boolean);
+  const valid = nonEmpty.filter((v) => normalizePhone(v, defaultCountry) !== null).length;
+  return {
+    header,
+    ratio: nonEmpty.length > 0 ? valid / nonEmpty.length : 0,
+    headerMatch: PHONE_HEADER_RE.test(header),
+  };
+}
+
 function detectPhoneColumn(
   headers: string[],
   rows: Record<string, string>[],
   defaultCountry: SupportedCountry
 ): { selectedColumn: string; ambiguous: boolean } {
   const sample = rows.slice(0, 20);
-  const scored = headers.map((header) => {
-    const nonEmpty = sample
-      .map((r) => (r[header] ?? '').trim())
-      .filter((v) => v.length > 0);
-    const ratio =
-      nonEmpty.length === 0
-        ? 0
-        : nonEmpty.filter((v) => normalizePhone(v, defaultCountry) !== null).length /
-          nonEmpty.length;
-    const headerMatch = PHONE_HEADER_RE.test(header);
-    return { header, ratio, headerMatch };
-  });
+  const scored = headers.map((h) => scoreColumn(h, sample, defaultCountry));
 
-  // Sort primarily by actual valid phone ratio, using explicit phone header name as tie-breaker
   scored.sort((a, b) => {
     if (Math.abs(b.ratio - a.ratio) >= 0.15) return b.ratio - a.ratio;
     if (a.headerMatch !== b.headerMatch) return a.headerMatch ? -1 : 1;
@@ -88,7 +76,7 @@ function detectPhoneColumn(
   });
 
   const strong = scored.filter((s) => s.ratio >= 0.5);
-  if (strong.length >= 1) {
+  if (strong.length > 0) {
     const ambiguous =
       strong.length > 1 &&
       Math.abs(strong[0].ratio - strong[1].ratio) < 0.15 &&
@@ -97,7 +85,7 @@ function detectPhoneColumn(
   }
 
   const headerMatches = scored.filter((s) => s.headerMatch);
-  if (headerMatches.length >= 1) {
+  if (headerMatches.length > 0) {
     return { selectedColumn: headerMatches[0].header, ambiguous: headerMatches.length > 1 };
   }
 
@@ -125,15 +113,14 @@ export function parseCsvBuffer(
     };
   }
 
-  const delimiter = detectDelimiter(trimmed);
   const lines = trimmed
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
 
-  // Check if file is a headerless plain list of phone numbers (single column where first line is itself a valid phone)
-  const firstLineParts = lines[0].split(delimiter);
-  if (firstLineParts.length === 1 && normalizePhone(firstLineParts[0], defaultCountry) !== null) {
+  const delimiter = detectDelimiter(lines);
+
+  if (lines[0].split(delimiter).length === 1 && normalizePhone(lines[0], defaultCountry) !== null) {
     const validation = validateAndDedupePhones(lines, defaultCountry);
     return {
       encoding,
@@ -141,10 +128,7 @@ export function parseCsvBuffer(
       headers: ['phone'],
       selectedColumn: 'phone',
       columnAmbiguous: false,
-      totalRows: validation.totalRows,
-      uniquePhones: validation.uniquePhones,
-      duplicatesRemoved: validation.duplicatesRemoved,
-      invalidRows: validation.invalidRows,
+      ...validation,
     };
   }
 
@@ -155,32 +139,25 @@ export function parseCsvBuffer(
     transformHeader: (h) => h.trim(),
   });
 
-  const headers = (parsed.meta.fields ?? []).filter((h) => h.length > 0);
+  const headers = (parsed.meta.fields ?? []).filter(Boolean);
   const rows = parsed.data.filter((row) =>
     Object.values(row).some((v) => typeof v === 'string' && v.trim().length > 0)
   );
 
-  let selectedColumn = columnOverride && headers.includes(columnOverride) ? columnOverride : '';
-  let columnAmbiguous = false;
+  const useOverride = Boolean(columnOverride && headers.includes(columnOverride));
+  const detected = useOverride
+    ? { selectedColumn: columnOverride!, ambiguous: false }
+    : detectPhoneColumn(headers, rows, defaultCountry);
 
-  if (!selectedColumn) {
-    const detected = detectPhoneColumn(headers, rows, defaultCountry);
-    selectedColumn = detected.selectedColumn;
-    columnAmbiguous = detected.ambiguous;
-  }
-
-  const rawValues = rows.map((row) => String(row[selectedColumn] ?? ''));
+  const rawValues = rows.map((row) => String(row[detected.selectedColumn] ?? ''));
   const validation = validateAndDedupePhones(rawValues, defaultCountry);
 
   return {
     encoding,
     delimiter,
     headers,
-    selectedColumn,
-    columnAmbiguous,
-    totalRows: validation.totalRows,
-    uniquePhones: validation.uniquePhones,
-    duplicatesRemoved: validation.duplicatesRemoved,
-    invalidRows: validation.invalidRows,
+    selectedColumn: detected.selectedColumn,
+    columnAmbiguous: detected.ambiguous,
+    ...validation,
   };
 }

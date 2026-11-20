@@ -26,19 +26,6 @@ function stripCopyPasteNoise(raw: string): string {
     .trim();
 }
 
-function toParseCandidate(cleaned: string, digitsOnly: string, defaultCountry: SupportedCountry): string {
-  if (defaultCountry !== 'RU' || cleaned.startsWith('+')) {
-    return cleaned;
-  }
-  if (digitsOnly.length === 11 && digitsOnly.startsWith('8')) {
-    return `+7${digitsOnly.slice(1)}`;
-  }
-  if (digitsOnly.length === 10 && digitsOnly.startsWith('9')) {
-    return `+7${digitsOnly}`;
-  }
-  return cleaned;
-}
-
 export function normalizePhone(
   raw: string,
   defaultCountry: SupportedCountry = 'RU'
@@ -47,46 +34,27 @@ export function normalizePhone(
   const cleaned = stripCopyPasteNoise(raw);
   if (!cleaned || /[a-zA-Zа-яА-ЯёЁ]/.test(cleaned)) return null;
 
-  const digitsOnly = cleaned.replace(/\D/g, '');
-  if (digitsOnly.length < 7 || digitsOnly.length > 15) return null;
+  const parsed = cleaned.startsWith('+')
+    ? parsePhoneNumberFromString(cleaned)
+    : parsePhoneNumberFromString(cleaned, defaultCountry as CountryCode);
 
-  const candidate = toParseCandidate(cleaned, digitsOnly, defaultCountry);
-  const parsed = candidate.startsWith('+')
-    ? parsePhoneNumberFromString(candidate)
-    : parsePhoneNumberFromString(candidate, defaultCountry as CountryCode);
-
-  return parsed && parsed.isValid() ? (parsed.number as E164Phone) : null;
+  return parsed?.isValid() ? (parsed.number as E164Phone) : null;
 }
 
 export function maskPhone(e164: string): string {
   const clean = e164.trim();
-  // Russian / Kazakh +7 AAA BBB-CC-DD -> +7 AAA •••-CC-DD
   if (/^\+7\d{10}$/.test(clean)) {
-    const area = clean.slice(2, 5);
-    const tail1 = clean.slice(8, 10);
-    const tail2 = clean.slice(10, 12);
-    return `+7 ${area} •••-${tail1}-${tail2}`;
+    return `+7 ${clean.slice(2, 5)} •••-${clean.slice(8, 10)}-${clean.slice(10, 12)}`;
   }
-  // Uzbekistan +998 AA BBB-CC-DD -> +998 AA •••-CC-DD
   if (/^\+998\d{9}$/.test(clean)) {
-    const area = clean.slice(4, 6);
-    const tail1 = clean.slice(9, 11);
-    const tail2 = clean.slice(11, 13);
-    return `+998 ${area} •••-${tail1}-${tail2}`;
+    return `+998 ${clean.slice(4, 6)} •••-${clean.slice(9, 11)}-${clean.slice(11, 13)}`;
   }
-  // Generic E.164 mask: always hide at least 3 middle digits even on short 7-8 digit international numbers
   if (/^\+\d{7,15}$/.test(clean)) {
-    const digitsCount = clean.length - 1;
-    if (digitsCount <= 8) {
-      const prefix = clean.slice(0, 3);
-      const tail = clean.slice(-2);
-      return `${prefix} •••-${tail}`;
+    if (clean.length <= 9) {
+      return `${clean.slice(0, 3)} •••-${clean.slice(-2)}`;
     }
-    const prefixLen = Math.min(5, clean.length - 7);
-    const prefix = clean.slice(0, Math.max(3, prefixLen));
-    const tail1 = clean.slice(-4, -2);
-    const tail2 = clean.slice(-2);
-    return `${prefix} •••-${tail1}-${tail2}`;
+    const prefixLen = Math.max(3, Math.min(5, clean.length - 7));
+    return `${clean.slice(0, prefixLen)} •••-${clean.slice(-4, -2)}-${clean.slice(-2)}`;
   }
   return '•••';
 }
