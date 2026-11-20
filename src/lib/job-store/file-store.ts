@@ -5,9 +5,9 @@ import type { Job, RecentJobMetrics } from '@/lib/types';
 import {
   buildRecentJobMetrics,
   isActiveLiveJob,
-  isJobExpired,
-  type JobStore,
-} from '@/lib/job-store/types';
+  returnActiveOrExpire,
+} from '@/lib/job-store/helpers';
+import type { JobStore } from '@/lib/job-store/types';
 
 interface LockRecord {
   owner: string;
@@ -80,13 +80,10 @@ export class FileJobStore implements JobStore {
 
   async getJob(id: string): Promise<Job | null> {
     if (!SAFE_ID_RE.test(id)) return null;
-    const job = await this.readJsonFile<Job>(this.jobPath(id));
-    if (!job) return null;
-    if (isJobExpired(job)) {
-      await this.deleteJob(id);
-      return null;
-    }
-    return job;
+    return returnActiveOrExpire(
+      await this.readJsonFile<Job>(this.jobPath(id)),
+      (expiredId) => this.deleteJob(expiredId)
+    );
   }
 
   async saveJob(job: Job): Promise<void> {

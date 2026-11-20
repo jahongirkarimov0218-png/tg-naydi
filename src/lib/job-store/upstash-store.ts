@@ -4,10 +4,10 @@ import type { Job, RecentJobMetrics } from '@/lib/types';
 import {
   buildRecentJobMetrics,
   isActiveLiveJob,
-  isJobExpired,
   JOB_TTL_SECONDS,
-  type JobStore,
-} from '@/lib/job-store/types';
+  returnActiveOrExpire,
+} from '@/lib/job-store/helpers';
+import type { JobStore } from '@/lib/job-store/types';
 
 const LIVE_QUEUE_KEY = 'tgnaydi:live:queue';
 const GLOBAL_LOCK_KEY = 'tgnaydi:lock:mtproto:session';
@@ -55,12 +55,7 @@ export class UpstashRedisJobStore implements JobStore {
 
   async getJob(id: string): Promise<Job | null> {
     const job = await this.redis.get<Job>(this.jobKey(id));
-    if (!job) return null;
-    if (isJobExpired(job)) {
-      await this.deleteJob(id);
-      return null;
-    }
-    return job;
+    return returnActiveOrExpire(job, (expiredId) => this.deleteJob(expiredId));
   }
 
   async saveJob(job: Job): Promise<void> {

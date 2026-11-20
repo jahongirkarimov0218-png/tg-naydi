@@ -41,23 +41,40 @@ function getRussianTypeLabel(item: JobItem): string {
   }
 }
 
+function extractExportFields(item: JobItem): {
+  username: string;
+  accountType: string;
+  personalUsername: string;
+  linkedChannel: string;
+} {
+  if (item.status === 'found') {
+    return {
+      username: item.username,
+      accountType: item.accountType,
+      personalUsername: item.personalUsername ?? '',
+      linkedChannel: item.linkedChannel ?? '',
+    };
+  }
+  return {
+    username: '',
+    accountType: item.status === 'found_no_username' ? item.accountType : '',
+    personalUsername: '',
+    linkedChannel: '',
+  };
+}
+
 function formatJobItemRow(item: JobItem, providerMode: Job['providerMode']): string[] {
-  const username = item.status === 'found' ? item.username : '';
-  const accountType =
-    item.status === 'found' || item.status === 'found_no_username' ? item.accountType : '';
-  const personalUsername = item.status === 'found' ? (item.personalUsername ?? '') : '';
-  const linkedChannel = item.status === 'found' ? (item.linkedChannel ?? '') : '';
-  const checkedAt =
-    item.status === 'pending' || item.status === 'checking' ? '' : (item.checkedAt ?? '');
+  const fields = extractExportFields(item);
+  const checkedAt = 'checkedAt' in item ? (item.checkedAt ?? '') : '';
 
   return [
     item.phone,
-    username,
-    accountType,
+    fields.username,
+    fields.accountType,
     getRussianTypeLabel(item),
     item.status,
-    personalUsername,
-    linkedChannel,
+    fields.personalUsername,
+    fields.linkedChannel,
     providerMode,
     checkedAt,
   ];

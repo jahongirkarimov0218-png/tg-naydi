@@ -9,7 +9,7 @@ export const KAZAN_SAMPLE_FILENAME = 'Контакты Казани.csv';
  *   3 not_found_or_hidden
  * Directly echoes docs/design/ref-02-monitor-and-results.jpg.
  */
-export const KAZAN_SAMPLE_CSV_TEXT = [
+const KAZAN_SAMPLE_CSV_TEXT = [
   'Имя;Телефон;Город',
   'Beze Cakes;+7 (905) 111-45-67;Казань',
   'SpeakUp Kids;8 963 222-65-43;Казань',

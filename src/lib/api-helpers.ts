@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractJobToken, verifyJobToken, verifyOperatorAccess } from '@/lib/auth';
-import { toPublicJobView } from '@/lib/job-engine';
+import { toPublicJobView, transitionJobToActive } from '@/lib/job-engine';
 import { getJobStore } from '@/lib/job-store';
 import type { JobStore } from '@/lib/job-store/types';
 import type { Job } from '@/lib/types';
@@ -73,4 +73,31 @@ export async function withAuthorizedJob(
   }
 
   return handler({ req, id, store, job });
+}
+
+export function createActivationHandler(options: {
+  allowedFrom: ReadonlyArray<Job['status']>;
+  requireItems?: boolean;
+}) {
+  return async function POST(req: NextRequest, context: JobRouteContext): Promise<NextResponse> {
+    return withAuthorizedJob(
+      req,
+      context,
+      async ({ job, store }) => {
+        if (options.requireItems && job.items.length === 0) {
+          return NextResponse.json(
+            { error: 'Cannot start a job with 0 valid numbers' },
+            { status: 400 }
+          );
+        }
+        const result = transitionJobToActive(job, options.allowedFrom);
+        if (!result.ok) {
+          return cooldownErrorResponse(result.retryAfterSec, result.job);
+        }
+        await store.saveJob(result.job);
+        return NextResponse.json({ job: toPublicJobView(result.job) });
+      },
+      { requireLiveOperator: true }
+    );
+  };
 }

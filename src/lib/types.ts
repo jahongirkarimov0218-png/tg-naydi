@@ -4,7 +4,7 @@ export type ProviderMode = 'SANDBOX' | 'LIVE_MTPROTO';
 
 export type StorageMode = 'upstash' | 'file' | 'unconfigured';
 
-export type JobStatus =
+type JobStatus =
   | 'draft'
   | 'queued'
   | 'running'
@@ -13,7 +13,7 @@ export type JobStatus =
   | 'completed'
   | 'failed';
 
-export type AccountType = 'person' | 'channel' | 'bot';
+type AccountType = 'person' | 'channel' | 'bot';
 
 /** Branded E.164 phone number parsed once at the input boundary. */
 export type E164Phone = string & { readonly __brand: 'E164Phone' };
@@ -49,7 +49,7 @@ export interface BatchLookupResult {
  * - 'error' ALWAYS carries errorCode
  * - 'pending' / 'not_found_or_hidden' CANNOT carry username or accountType
  */
-export type JobItemState =
+type JobItemState =
   | { status: 'pending' | 'checking' }
   | {
       status: 'found';

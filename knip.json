@@ -2,10 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "src/app/**/{page,layout,route}.{ts,tsx}",
-    "worker/mtproto.ts",
-    "scripts/monitoring/anomaly_detector.mjs",
-    "scripts/quality/crap_report.mjs",
-    "scripts/evals/run_claude_ab.mjs"
+    "worker/mtproto.ts"
   ],
   "project": [
     "src/**/*.{ts,tsx}",
@@ -14,7 +11,6 @@
   ],
   "ignoreDependencies": [
     "eslint-config-next",
-    "@tailwindcss/postcss",
     "tailwindcss"
   ]
 }

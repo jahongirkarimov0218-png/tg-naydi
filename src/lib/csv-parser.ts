@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 import { normalizePhone, validateAndDedupePhones } from '@/lib/phone-normalizer';
-import type { SupportedCountry } from '@/lib/types';
+import type { E164Phone, SupportedCountry } from '@/lib/types';
 
 export interface DecodedCsv {
   text: string;
@@ -14,7 +14,7 @@ export interface ParsedCsvResult {
   selectedColumn: string;
   columnAmbiguous: boolean;
   totalRows: number;
-  uniquePhones: string[];
+  uniquePhones: E164Phone[];
   duplicatesRemoved: number;
   invalidRows: number;
 }
@@ -61,7 +61,7 @@ function detectDelimiter(sampleText: string): string {
   return best;
 }
 
-export function detectPhoneColumn(
+function detectPhoneColumn(
   headers: string[],
   rows: Record<string, string>[],
   defaultCountry: SupportedCountry

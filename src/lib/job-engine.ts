@@ -9,7 +9,8 @@ import type {
   PublicJobView,
   SupportedCountry,
 } from '@/lib/types';
-import { JOB_TTL_SECONDS, type JobStore } from '@/lib/job-store/types';
+import { JOB_TTL_SECONDS } from '@/lib/job-store/helpers';
+import type { JobStore } from '@/lib/job-store/types';
 import { maskPhone, parseE164Phone } from '@/lib/phone-normalizer';
 import { SandboxLookupProvider } from '@/lib/providers/sandbox';
 import { logInfo } from '@/lib/logger';
@@ -20,7 +21,7 @@ export const LIVE_MIN_PAUSE_MS = 15_000;
 export const LIVE_MAX_BATCH_SIZE = 15;
 const STEP_LEASE_TTL_MS = 15_000;
 
-export function getRemainingCooldownSeconds(retryAfterAt?: string, nowMs: number = Date.now()): number {
+function getRemainingCooldownSeconds(retryAfterAt?: string, nowMs: number = Date.now()): number {
   if (!retryAfterAt) return 0;
   const remainingMs = new Date(retryAfterAt).getTime() - nowMs;
   return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
@@ -329,6 +330,20 @@ function finalizeBatchStatus(
   return null;
 }
 
+export async function completeEmptyPendingJob(
+  store: JobStore,
+  job: Job,
+  nowMs: number = Date.now()
+): Promise<Job> {
+  job.status = 'completed';
+  job.retryAfterAt = undefined;
+  job.stats = computeJobStats(job.items);
+  job.updatedAt = new Date(nowMs).toISOString();
+  await store.saveJob(job);
+  await store.recordJobOutcome('completed');
+  return job;
+}
+
 async function executeLeasedSandboxBatch(store: JobStore, jobId: string): Promise<StepOutcome | null> {
   const fresh = await store.getJob(jobId);
   if (!fresh) return null;
@@ -338,13 +353,7 @@ async function executeLeasedSandboxBatch(store: JobStore, jobId: string): Promis
 
   const pending = fresh.items.filter((i) => i.status === 'pending').slice(0, fresh.batchSize);
   if (pending.length === 0) {
-    fresh.status = 'completed';
-    fresh.retryAfterAt = undefined;
-    fresh.stats = computeJobStats(fresh.items);
-    fresh.updatedAt = new Date().toISOString();
-    await store.saveJob(fresh);
-    await store.recordJobOutcome('completed');
-    return { kind: 'ok', job: fresh };
+    return { kind: 'ok', job: await completeEmptyPendingJob(store, fresh) };
   }
 
   const provider = new SandboxLookupProvider();

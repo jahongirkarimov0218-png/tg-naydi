@@ -1,22 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { parseCsvBuffer, type ParsedCsvResult } from '@/lib/csv-parser';
 import { KAZAN_SAMPLE_CSV_BYTES, KAZAN_SAMPLE_FILENAME } from '@/lib/sample-data';
-import type {
-  ProviderMode,
-  PublicJobView,
-  StorageMode,
-  SupportedCountry,
-} from '@/lib/types';
+import type { ProviderMode, StorageMode, SupportedCountry } from '@/lib/types';
+import { useTgNaydiJob } from '@/hooks/useTgNaydiJob';
 import { ModeBanner } from '@/components/ModeBanner';
 import { UploadPanel } from '@/components/UploadPanel';
 import { LiveMonitorCard } from '@/components/LiveMonitorCard';
 import { ResultsCard } from '@/components/ResultsCard';
 import { LandingSections } from '@/components/LandingSections';
 
-const LAST_JOB_KEY = 'tgnaydi:lastJobId';
-const UPLOAD_CHUNK_SIZE = 500;
 const MAX_CLIENT_FILE_BYTES = 20 * 1024 * 1024; // 20 MB per spec.md §3.1
 
 interface TgNaydiWorkspaceProps {
@@ -30,167 +24,34 @@ export function TgNaydiWorkspace({
   initialStorageMode,
   initialWorkerOnline,
 }: TgNaydiWorkspaceProps) {
-  const [providerMode] = useState<ProviderMode>(initialProviderMode);
-  const [storageMode] = useState<StorageMode>(initialStorageMode);
-  const [workerOnline, setWorkerOnline] = useState<boolean>(initialWorkerOnline);
-
   const [rawBytes, setRawBytes] = useState<Uint8Array | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [defaultCountry, setDefaultCountry] = useState<SupportedCountry>('RU');
   const [selectedColumn, setSelectedColumn] = useState<string>('');
   const [parsed, setParsed] = useState<ParsedCsvResult | null>(null);
-
   const [batchSize, setBatchSize] = useState<number>(5);
   const [pauseMs, setPauseMs] = useState<number>(
     initialProviderMode === 'LIVE_MTPROTO' ? 15_000 : 600
   );
-
-  const [job, setJob] = useState<PublicJobView | null>(null);
-  const [filter, setFilter] = useState<'all' | 'person' | 'channel' | 'bot'>('all');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isStepping, setIsStepping] = useState(false);
-  const [errorText, setErrorText] = useState<string | null>(null);
-
-  const [showOperatorModal, setShowOperatorModal] = useState(false);
   const [operatorKey, setOperatorKey] = useState('');
   const [operatorError, setOperatorError] = useState<string | null>(null);
 
-  const steppingRef = useRef(false);
-  const actionEpochRef = useRef(0);
-
-  const syncUrlWithJob = (jobId: string | null) => {
-    const url = new URL(window.location.href);
-    if (jobId) {
-      url.searchParams.set('job', jobId);
-      window.localStorage.setItem(LAST_JOB_KEY, jobId);
-    } else {
-      url.searchParams.delete('job');
-      window.localStorage.removeItem(LAST_JOB_KEY);
-    }
-    window.history.replaceState({}, '', url.toString());
-  };
-
-  const fetchJobFromServer = useCallback(
-    async (jobId: string, activeFilter: 'all' | 'person' | 'channel' | 'bot' = 'all') => {
-      try {
-        const res = await fetch(`/api/jobs/${jobId}?limit=200&filter=${activeFilter}`, {
-          cache: 'no-store',
-        });
-        if (!res.ok) {
-          if (res.status === 404 || res.status === 401) {
-            syncUrlWithJob(null);
-            setJob(null);
-          }
-          return;
-        }
-        const data = (await res.json()) as { job: PublicJobView };
-        setJob(data.job);
-      } catch {
-        // keep existing UI state on transient network glitch
-      }
-    },
-    []
-  );
-
-  // F5 recovery: restore ONLY jobId from URL / localStorage pointer, fetch truth from server JobStore
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const jobId = params.get('job') || window.localStorage.getItem(LAST_JOB_KEY);
-    if (jobId) {
-      void fetchJobFromServer(jobId);
-    }
-  }, [fetchJobFromServer]);
-
-  // Periodically refresh /api/health workerOnline indicator in LIVE_MTPROTO mode
-  useEffect(() => {
-    if (providerMode !== 'LIVE_MTPROTO') return;
-    const id = setInterval(async () => {
-      try {
-        const res = await fetch('/api/health', { cache: 'no-store' });
-        if (res.ok) {
-          const data = (await res.json()) as { workerOnline?: boolean };
-          setWorkerOnline(Boolean(data.workerOnline));
-        }
-      } catch {
-        // ignore
-      }
-    }, 15_000);
-    return () => clearInterval(id);
-  }, [providerMode]);
-
-  // Drive SANDBOX steps or LIVE_MTPROTO polling while job is active
-  useEffect(() => {
-    if (!job) return;
-
-    if (job.status === 'rate_limited') {
-      const remaining = job.retryAfterSec ?? 0;
-      // Local 1s countdown without hammering /api/jobs/[id] once cooldown hits 0
-      if (remaining > 0) {
-        const timer = setTimeout(() => {
-          setJob((prev) => {
-            if (!prev || prev.id !== job.id || prev.status !== 'rate_limited') return prev;
-            const nextSec = Math.max(0, (prev.retryAfterSec ?? 1) - 1);
-            return { ...prev, retryAfterSec: nextSec };
-          });
-        }, 1000);
-        return () => clearTimeout(timer);
-      }
-      return;
-    }
-
-    if (job.status !== 'running' && job.status !== 'queued') {
-      return;
-    }
-
-    if (job.providerMode === 'LIVE_MTPROTO') {
-      const timer = setInterval(() => {
-        void fetchJobFromServer(job.id, filter);
-      }, 2500);
-      return () => clearInterval(timer);
-    }
-
-    // SANDBOX step driver with error handling & stale-response guard
-    const capturedEpoch = actionEpochRef.current;
-    const capturedJobId = job.id;
-    const timer = setTimeout(async () => {
-      if (steppingRef.current) return;
-      steppingRef.current = true;
-      setIsStepping(true);
-      try {
-        const res = await fetch(`/api/jobs/${capturedJobId}/step`, { method: 'POST' });
-        if (actionEpochRef.current !== capturedEpoch) {
-          return;
-        }
-        if (res.ok || res.status === 429) {
-          const data = (await res.json()) as { job?: PublicJobView };
-          if (data.job && actionEpochRef.current === capturedEpoch) {
-            setJob(data.job);
-            setErrorText(null);
-          }
-        } else {
-          const err = (await res.json().catch(() => ({}))) as { error?: string };
-          setErrorText(
-            err.error || `Сервер вернул ошибку (${res.status}) при обработке пачки. Попробуйте продолжить.`
-          );
-          setJob((prev) =>
-            prev && prev.id === capturedJobId ? { ...prev, status: 'paused' } : prev
-          );
-        }
-      } catch {
-        if (actionEpochRef.current === capturedEpoch) {
-          setErrorText('Сбой сети при обработке пачки. Нажмите «Продолжить» после восстановления связи.');
-          setJob((prev) =>
-            prev && prev.id === capturedJobId ? { ...prev, status: 'paused' } : prev
-          );
-        }
-      } finally {
-        steppingRef.current = false;
-        setIsStepping(false);
-      }
-    }, job.pauseMs);
-
-    return () => clearTimeout(timer);
-  }, [job, filter, fetchJobFromServer]);
+  const {
+    workerOnline,
+    job,
+    filter,
+    isSubmitting,
+    isStepping,
+    errorText,
+    setErrorText,
+    showOperatorModal,
+    setShowOperatorModal,
+    startJob,
+    pauseJob,
+    resumeJob,
+    deleteJob,
+    changeFilter,
+  } = useTgNaydiJob(initialProviderMode, initialWorkerOnline);
 
   const reparse = (bytes: Uint8Array, country: SupportedCountry, colOverride?: string) => {
     const result = parseCsvBuffer(bytes, country, colOverride);
@@ -204,8 +65,7 @@ export function TgNaydiWorkspace({
       setErrorText('Файл превышает лимит 20 МБ. Разбейте базу на части или удалите лишние колонки.');
       return;
     }
-    const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
+    const bytes = new Uint8Array(await file.arrayBuffer());
     setRawBytes(bytes);
     setFileName(file.name);
     reparse(bytes, defaultCountry);
@@ -217,120 +77,6 @@ export function TgNaydiWorkspace({
     setFileName(KAZAN_SAMPLE_FILENAME);
     setDefaultCountry('RU');
     reparse(KAZAN_SAMPLE_CSV_BYTES, 'RU');
-  };
-
-  const handleCountryChange = (c: SupportedCountry) => {
-    setDefaultCountry(c);
-    if (rawBytes) reparse(rawBytes, c, selectedColumn || undefined);
-  };
-
-  const handleColumnChange = (col: string) => {
-    setSelectedColumn(col);
-    if (rawBytes) reparse(rawBytes, defaultCountry, col);
-  };
-
-  const handleStartJob = async () => {
-    if (!parsed || parsed.uniquePhones.length === 0) return;
-    actionEpochRef.current += 1;
-    setErrorText(null);
-    setIsSubmitting(true);
-
-    try {
-      const createRes = await fetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          fileName: fileName || 'contacts.csv',
-          batchSize,
-          pauseMs,
-          defaultCountry,
-          totalSourceRows: parsed.totalRows,
-          duplicatesRemoved: parsed.duplicatesRemoved,
-          invalidRows: parsed.invalidRows,
-        }),
-      });
-
-      if (createRes.status === 401) {
-        setShowOperatorModal(true);
-        setErrorText('Введите ключ оператора для запуска в режиме LIVE MTProto.');
-        return;
-      }
-
-      if (!createRes.ok) {
-        const err = (await createRes.json().catch(() => ({}))) as { error?: string };
-        setErrorText(err.error || 'Не удалось создать задачу');
-        return;
-      }
-
-      const created = (await createRes.json()) as { job: PublicJobView };
-      const jobId = created.job.id;
-
-      // Upload normalized unique numbers in <= 500 chunks (~25 KB << 4.5 MB Vercel limit)
-      for (let i = 0; i < parsed.uniquePhones.length; i += UPLOAD_CHUNK_SIZE) {
-        const slice = parsed.uniquePhones.slice(i, i + UPLOAD_CHUNK_SIZE);
-        const chunkRes = await fetch(`/api/jobs/${jobId}/chunks`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ phones: slice }),
-        });
-        if (!chunkRes.ok) {
-          const err = (await chunkRes.json().catch(() => ({}))) as { error?: string };
-          setErrorText(err.error || 'Ошибка загрузки чанка номеров');
-          return;
-        }
-      }
-
-      const startRes = await fetch(`/api/jobs/${jobId}/start`, { method: 'POST' });
-      if (!startRes.ok) {
-        const err = (await startRes.json().catch(() => ({}))) as { error?: string };
-        setErrorText(err.error || 'Не удалось запустить проверку');
-        return;
-      }
-
-      const started = (await startRes.json()) as { job: PublicJobView };
-      syncUrlWithJob(started.job.id);
-      setJob(started.job);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handlePause = async () => {
-    if (!job) return;
-    actionEpochRef.current += 1;
-    const res = await fetch(`/api/jobs/${job.id}/pause`, { method: 'POST' });
-    if (res.ok) {
-      const data = (await res.json()) as { job: PublicJobView };
-      setJob(data.job);
-    }
-  };
-
-  const handleResume = async () => {
-    if (!job) return;
-    actionEpochRef.current += 1;
-    setErrorText(null);
-    const res = await fetch(`/api/jobs/${job.id}/resume`, { method: 'POST' });
-    if (res.ok || res.status === 429) {
-      const data = (await res.json()) as { job?: PublicJobView };
-      if (data.job) setJob(data.job);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!job) return;
-    actionEpochRef.current += 1;
-    const res = await fetch(`/api/jobs/${job.id}`, { method: 'DELETE' });
-    if (res.ok) {
-      syncUrlWithJob(null);
-      setJob(null);
-    }
-  };
-
-  const handleFilterChange = (nextFilter: 'all' | 'person' | 'channel' | 'bot') => {
-    setFilter(nextFilter);
-    if (job) {
-      void fetchJobFromServer(job.id, nextFilter);
-    }
   };
 
   const handleOperatorLogin = async (e: React.FormEvent) => {
@@ -352,33 +98,30 @@ export function TgNaydiWorkspace({
   return (
     <div className="min-h-screen">
       <ModeBanner
-        providerMode={providerMode}
-        storageMode={storageMode}
+        providerMode={initialProviderMode}
+        storageMode={initialStorageMode}
         workerOnline={workerOnline}
         onOpenOperatorModal={
-          providerMode === 'LIVE_MTPROTO' ? () => setShowOperatorModal(true) : undefined
+          initialProviderMode === 'LIVE_MTPROTO' ? () => setShowOperatorModal(true) : undefined
         }
       />
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-        {/* Hero Header matching ref-02 */}
         <section className="max-w-3xl">
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-950 sm:text-5xl sm:leading-[1.08]">
             Подготовь базу к рассылке в Telegram
           </h1>
           <p className="mt-4 text-base leading-relaxed text-slate-600 sm:text-lg">
             Загружаешь свою базу с номерами, получаешь тот же файл с username и типом аккаунта.
-            Дальше писать можно по username, а не по номерам: меньше ошибок и ниже риск
-            ограничений.
+            Дальше писать можно по username, а не по номерам: меньше ошибок и ниже риск ограничений.
           </p>
         </section>
 
-        {/* Interactive 2-column Workspace */}
         <section className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
           <div className="lg:sticky lg:top-20 lg:col-span-5">
             <UploadPanel
-              providerMode={providerMode}
-              storageBlocked={storageMode === 'unconfigured'}
+              providerMode={initialProviderMode}
+              storageBlocked={initialStorageMode === 'unconfigured'}
               fileName={fileName}
               parsed={parsed}
               defaultCountry={defaultCountry}
@@ -387,13 +130,23 @@ export function TgNaydiWorkspace({
               selectedColumn={selectedColumn}
               isSubmitting={isSubmitting}
               errorText={errorText}
-              onCountryChange={handleCountryChange}
+              onCountryChange={(c) => {
+                setDefaultCountry(c);
+                if (rawBytes) reparse(rawBytes, c, selectedColumn || undefined);
+              }}
               onBatchSizeChange={setBatchSize}
               onPauseMsChange={setPauseMs}
-              onColumnChange={handleColumnChange}
+              onColumnChange={(col) => {
+                setSelectedColumn(col);
+                if (rawBytes) reparse(rawBytes, defaultCountry, col);
+              }}
               onFileSelected={(f) => void handleFileSelected(f)}
               onLoadKazanSample={handleLoadKazanSample}
-              onStartJob={() => void handleStartJob()}
+              onStartJob={() => {
+                if (parsed && parsed.uniquePhones.length > 0) {
+                  void startJob({ parsed, fileName, batchSize, pauseMs, defaultCountry });
+                }
+              }}
             />
           </div>
 
@@ -401,19 +154,17 @@ export function TgNaydiWorkspace({
             <LiveMonitorCard
               job={job}
               isStepping={isStepping}
-              onPause={() => void handlePause()}
-              onResume={() => void handleResume()}
-              onDelete={() => void handleDelete()}
+              onPause={() => void pauseJob()}
+              onResume={() => void resumeJob()}
+              onDelete={() => void deleteJob()}
             />
-
-            {job && <ResultsCard job={job} filter={filter} onFilterChange={handleFilterChange} />}
+            {job && <ResultsCard job={job} filter={filter} onFilterChange={changeFilter} />}
           </div>
         </section>
 
         <LandingSections />
       </main>
 
-      {/* Operator Auth Modal for LIVE_MTPROTO */}
       {showOperatorModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
           <form

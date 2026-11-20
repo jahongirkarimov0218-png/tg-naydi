@@ -3,8 +3,8 @@ import { KAZAN_FIXTURE_MAP } from '@/lib/sample-data';
 import type { BatchLookupResult, LookupOutcome } from '@/lib/types';
 import type { LookupBatchContext, TelegramLookupProvider } from '@/lib/providers/types';
 
-export const SANDBOX_FLOOD_WAIT_TRIGGER_PHONE = '+79990000429';
-export const SANDBOX_FLOOD_WAIT_SECONDS = 3;
+const SANDBOX_FLOOD_WAIT_TRIGGER_PHONE = '+79990000429';
+const SANDBOX_FLOOD_WAIT_SECONDS = 3;
 
 const ADJECTIVES = [
   'alex',
