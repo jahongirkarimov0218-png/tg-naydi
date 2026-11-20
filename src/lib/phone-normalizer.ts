@@ -13,18 +13,25 @@ export function normalizePhone(
   defaultCountry: SupportedCountry = 'RU'
 ): string | null {
   if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
+  // Strip Excel/CRM copy-paste artifacts: zero-width chars, BOM, NBSP, leading text apostrophe, and tel: URI prefix
+  const cleaned = raw
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\u00A0/g, ' ')
+    .trim()
+    .replace(/^'+/, '')
+    .replace(/^tel:\s*/i, '')
+    .trim();
+  if (!cleaned) return null;
 
-  // Reject inputs that contain letters (not a phone string)
-  if (/[a-zA-Zа-яА-ЯёЁ]/.test(trimmed)) return null;
+  // Reject inputs that still contain letters (not a phone string)
+  if (/[a-zA-Zа-яА-ЯёЁ]/.test(cleaned)) return null;
 
-  const digitsOnly = trimmed.replace(/\D/g, '');
+  const digitsOnly = cleaned.replace(/\D/g, '');
   if (digitsOnly.length < 7 || digitsOnly.length > 15) return null;
 
   // Handle common Russian 8-prefix (11 digits) and 10-digit mobile strings cleanly
-  let candidate = trimmed;
-  if (defaultCountry === 'RU' && !trimmed.startsWith('+')) {
+  let candidate = cleaned;
+  if (defaultCountry === 'RU' && !cleaned.startsWith('+')) {
     if (digitsOnly.length === 11 && digitsOnly.startsWith('8')) {
       candidate = `+7${digitsOnly.slice(1)}`;
     } else if (digitsOnly.length === 10 && digitsOnly.startsWith('9')) {

@@ -110,7 +110,7 @@ def os_sandbox_available() -> bool:
 
 
 def main() -> None:
-    raw = sys.stdin.read().strip()
+    raw = sys.stdin.read().lstrip("\ufeff").strip()
     if not raw:
         allow("unknown", "empty stdin payload", "")
 
