@@ -1,0 +1,64 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(src/**)",
+      "Read(tests/**)",
+      "Read(evals/**)",
+      "Read(docs/**)",
+      "Read(scripts/**)",
+      "Read(worker/**)",
+      "Read(CLAUDE.md)",
+      "Read(REVIEW.md)",
+      "Read(package.json)",
+      "Bash(pnpm run check)",
+      "Bash(pnpm run eval:domain)",
+      "Bash(pnpm run test:e2e)",
+      "Bash(pnpm run build)",
+      "Bash(python scripts/verify_guards.py)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(pnpm dlx vercel *)",
+      "Write(package.json)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(**/*.session)",
+      "Read(secrets/**)",
+      "Edit(.env)",
+      "Edit(.env.*)",
+      "Write(.env)",
+      "Write(.env.*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Read|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/hooks/pre_tool_guard.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/hooks/post_tool_audit.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

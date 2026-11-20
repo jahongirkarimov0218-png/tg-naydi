@@ -2,6 +2,10 @@
 node_modules/
 .pnpm-store/
 
+# Isolated git worktrees (NEVER commit)
+.worktrees/
+worktrees/
+
 # Next.js / Build
 .next/
 out/

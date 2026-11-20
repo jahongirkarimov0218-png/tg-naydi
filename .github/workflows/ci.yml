@@ -1,0 +1,75 @@
+name: CI (Checks, Evals, Guards, Secrets, E2E)
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: Secret Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  verify:
+    name: Typecheck, Lint, Unit/Integration, Domain Evals, Guards & Playwright E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Verify PreToolUse Guards (adversarial exit 2 tests)
+        run: python3 scripts/verify_guards.py
+
+      - name: Install Dependencies
+        if: hashFiles('package.json') != ''
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify GramJS is never imported in Next.js src/app
+        if: hashFiles('package.json') != ''
+        run: |
+          if grep -rnE "from ['\"]telegram|require\(['\"]telegram" src/app/; then
+            echo "ERROR: GramJS must never be imported in src/app/"
+            exit 1
+          fi
+
+      - name: Run Check (tsc + eslint + vitest)
+        if: hashFiles('package.json') != ''
+        run: pnpm run check
+
+      - name: Run 15-case Domain Evals
+        if: hashFiles('package.json') != ''
+        run: pnpm run eval:domain
+
+      - name: Build Production Bundle
+        if: hashFiles('package.json') != ''
+        run: pnpm run build
+
+      - name: Install Playwright Chromium & Run E2E
+        if: hashFiles('package.json') != ''
+        run: |
+          pnpm exec playwright install chromium --with-deps
+          pnpm run test:e2e

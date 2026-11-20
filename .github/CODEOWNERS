@@ -1,0 +1,8 @@
+# Mandatory code owner approval for protected branches (main)
+# Replace @OWNER_GITHUB_HANDLE once GitHub repo is linked in Checkpoint 2.
+* @OWNER_GITHUB_HANDLE
+/.claude/ @OWNER_GITHUB_HANDLE
+/scripts/hooks/ @OWNER_GITHUB_HANDLE
+/.github/ @OWNER_GITHUB_HANDLE
+/REVIEW.md @OWNER_GITHUB_HANDLE
+/CLAUDE.md @OWNER_GITHUB_HANDLE
