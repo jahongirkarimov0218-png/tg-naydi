@@ -60,3 +60,31 @@ Executed against live Production (`https://tg-naydi.vercel.app`, deployment `dpl
 | 11 | `GET /api/jobs/:id/export` | `200` | Raw bytes start with UTF-8 BOM `[0xEF, 0xBB, 0xBF]` + Russian Excel `;` header (`495 bytes`) |
 | 12 | `DELETE /api/jobs/:id` | `200` | Job & PII deleted immediately |
 | 13 | `GET /api/jobs/:id` (post-DELETE) | `404` | Confirmed permanently removed from Upstash Redis |
+
+---
+
+## 4. `LIVE_MTPROTO` Production Cutover & Canary Verification
+
+- **PR #6 (Worker `.env.local` autoload + canary probe):** https://github.com/jahongirkarimov0218-png/tg-naydi/pull/6 (merged into `main` as `6174824`, CI run `44716023181` — `Gitleaks` + `verify` + `Vercel` all PASS)
+- **Active `LIVE_MTPROTO` Production Deployment:** `dpl_Gm7KMLRi5nP5xgAKLWYD3cxUaJSe` (`https://tg-naydi.vercel.app`, `PROVIDER_MODE=LIVE_MTPROTO`, `NEXT_PUBLIC_PROVIDER_MODE=LIVE_MTPROTO`, 256-bit `OPERATOR_ACCESS_KEY` stored as Vercel Secret & local `.env.local`)
+- **Standalone Worker (`pnpm run worker:mtproto`):** Connected cleanly to Telegram MTProto (`149.154.167.50`, GramJS LAYER 198); **0 raw E.164 phone numbers and 0 `TELEGRAM_SESSION` strings** in worker logs.
+
+### Live Canary Probe (`node scripts/smoke/live_canary.mjs https://tg-naydi.vercel.app`, exit `0`)
+
+| # | Check | HTTP | Verified Result |
+| :-: | :--- | :-: | :--- |
+| 1 | `GET /api/health` | `200` | `providerMode=LIVE_MTPROTO`, `storageMode=upstash`, **`workerOnline=true`** |
+| 2 | `POST /api/jobs` (no operator key) | `401` | Fail-closed operator gate blocked unauthorized caller |
+| 3 | `POST /api/auth/operator` | `200` | Issued `tgnaydi_operator` cookie (`Secure; HttpOnly; SameSite=lax; Max-Age=43200`) |
+| 4 | `POST /api/jobs` (canary) | `201` | Safety floors enforced (`batchSize=2 <= 5`, `pauseMs=15000 >= 15000`) |
+| 5 | `POST /api/jobs/:id/chunks` + `/start` | `200` | `added=2`, transitioned to `queued` for standalone worker |
+| 6 | Live worker processing (`Upstash ↔ Telegram MTProto`) | `200` | `status=completed`, `processed=2/2`, `found=2`, **0 raw E.164 phones in JSON** |
+| 7 | `GET /api/jobs/:id/export` | `200` | Raw UTF-8 BOM `[0xEF, 0xBB, 0xBF]` + `;LIVE_MTPROTO;` mode marker verified (`274 bytes`) |
+| 8 | `DELETE /api/jobs/:id` → `GET /api/jobs/:id` | `200` → `404` | Canary PII removed immediately from Upstash Redis |
+
+### Emergency Kill-Switch (Instant Return to `SANDBOX`)
+If the standalone worker is stopped or Telegram issues prolonged `FLOOD_WAIT`, return production to `SANDBOX` immediately:
+```powershell
+node -e "const {execFileSync}=require('child_process'); for (const k of ['PROVIDER_MODE','NEXT_PUBLIC_PROVIDER_MODE']) execFileSync('pnpm.cmd',['dlx','vercel','env','add',k,'--environment','production','--force','--type','config'],{input:'SANDBOX',stdio:['pipe','inherit','inherit'],shell:true});"
+pnpm dlx vercel deploy --prod --yes
+```
