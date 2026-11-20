@@ -10,6 +10,7 @@ import { UploadPanel } from '@/components/UploadPanel';
 import { LiveMonitorCard } from '@/components/LiveMonitorCard';
 import { ResultsCard } from '@/components/ResultsCard';
 import { LandingSections } from '@/components/LandingSections';
+import { Button } from '@/components/ui/button';
 
 const MAX_CLIENT_FILE_BYTES = 20 * 1024 * 1024; // 20 MB per spec.md §3.1
 
@@ -106,18 +107,18 @@ export function TgNaydiWorkspace({
         }
       />
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
         <section className="max-w-3xl">
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-950 sm:text-5xl sm:leading-[1.08]">
+          <h1 className="text-3xl font-semibold tracking-[-0.03em] text-zinc-950 sm:text-5xl sm:leading-[1.08]">
             Подготовь базу к рассылке в Telegram
           </h1>
-          <p className="mt-4 text-base leading-relaxed text-slate-600 sm:text-lg">
+          <p className="mt-4 max-w-2xl text-base leading-relaxed text-zinc-500 sm:text-[17px]">
             Загружаешь свою базу с номерами, получаешь тот же файл с username и типом аккаунта.
             Дальше писать можно по username, а не по номерам: меньше ошибок и ниже риск ограничений.
           </p>
         </section>
 
-        <section className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+        <section className="mt-8 grid grid-cols-1 items-start gap-6 lg:mt-10 lg:grid-cols-12">
           <div className="lg:sticky lg:top-20 lg:col-span-5">
             <UploadPanel
               providerMode={initialProviderMode}
@@ -166,13 +167,13 @@ export function TgNaydiWorkspace({
       </main>
 
       {showOperatorModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/50 p-4 backdrop-blur-[2px]">
           <form
             onSubmit={(e) => void handleOperatorLogin(e)}
-            className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl"
+            className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xs"
           >
-            <h3 className="text-lg font-bold text-slate-900">Ключ оператора</h3>
-            <p className="mt-1 text-xs text-slate-500">
+            <h3 className="text-base font-semibold tracking-tight text-zinc-950">Ключ оператора</h3>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
               Защищает подключённый Telegram-аккаунт от запусков посторонними посетителями.
             </p>
             <input
@@ -180,23 +181,16 @@ export function TgNaydiWorkspace({
               value={operatorKey}
               onChange={(e) => setOperatorKey(e.target.value)}
               placeholder="Введите OPERATOR_ACCESS_KEY"
-              className="mt-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+              className="mt-4 h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-950 shadow-xs transition-colors duration-150 placeholder:text-zinc-400 focus-visible:border-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950/20"
             />
             {operatorError && <p className="mt-2 text-xs text-red-600">{operatorError}</p>}
             <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowOperatorModal(false)}
-                className="rounded-xl px-3.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100"
-              >
+              <Button variant="outline" size="md" onClick={() => setShowOperatorModal(false)}>
                 Отмена
-              </button>
-              <button
-                type="submit"
-                className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-              >
+              </Button>
+              <Button type="submit" variant="primary" size="md">
                 Подтвердить
-              </button>
+              </Button>
             </div>
           </form>
         </div>
