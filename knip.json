@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/app/**/{page,layout,route}.{ts,tsx}",
+    "worker/mtproto.ts"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "worker/**/*.ts",
+    "scripts/**/*.{mjs,ts}"
+  ],
+  "ignoreDependencies": [
+    "eslint-config-next",
+    "tailwindcss"
+  ]
+}

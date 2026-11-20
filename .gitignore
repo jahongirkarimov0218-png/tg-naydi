@@ -12,6 +12,8 @@ out/
 build/
 dist/
 coverage/
+next-env.d.ts
+tsconfig.tsbuildinfo
 
 # Secrets & Credentials (NEVER commit)
 .env
@@ -30,6 +32,8 @@ tmp/
 # Testing & Playwright
 playwright-report/
 test-results/
+reports/
+.stryker-tmp/
 
 # Vercel
 .vercel/

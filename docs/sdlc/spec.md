@@ -4,7 +4,7 @@
 **Основано на:** `docs/sdlc/intent.md`, `docs/decisions/001-architecture.md`, `docs/sdlc/source-of-truth.md`
 **Визуальные референсы в Git:** `docs/design/ref-01-flow-and-usecases.jpg`, `docs/design/ref-02-monitor-and-results.jpg`
 **Дата:** 2026-11-20
-**Статус:** Обновлено после независимого Blind Builder Check — готово к утверждению владельцем продукта
+**Статус:** Утверждено владельцем продукта (2026-11-20, Checkpoint 1; обновлено по Blind Builder Check и Blind Code Review)
 
 ---
 
