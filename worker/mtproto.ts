@@ -19,6 +19,7 @@ import {
   extractPersonalChannelUsername,
   mapImportedTelegramUsers,
 } from './gramjs-adapter';
+import { loadDotEnvFile } from './env-loader';
 import {
   computeNextPollDelayMs,
   processNextLiveBatch,
@@ -98,6 +99,7 @@ async function runSingleDaemonTick(
 }
 
 async function runDaemon(): Promise<void> {
+  loadDotEnvFile();
   const { apiId, apiHash, sessionStr } = readWorkerEnvConfig();
   const store = requireWorkerStore();
 
