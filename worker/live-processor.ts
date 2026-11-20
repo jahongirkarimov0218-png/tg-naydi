@@ -11,6 +11,9 @@ import type { TelegramLookupProvider } from '@/lib/providers/types';
 import type { BatchLookupResult, Job } from '@/lib/types';
 
 const SESSION_LOCK_TTL_MS = 60_000;
+export const DEFAULT_IDLE_POLL_MS = 15_000;
+const MIN_IDLE_POLL_MS = 3_000;
+const MAX_IDLE_POLL_MS = 60_000;
 
 export type LiveTickResult =
   | { kind: 'cooldown'; waitMs: number }
@@ -19,7 +22,18 @@ export type LiveTickResult =
   | { kind: 'processed'; jobId: string; status: Job['status']; pauseMs: number }
   | { kind: 'failed'; jobId: string };
 
-export function computeNextPollDelayMs(tick: LiveTickResult): number {
+export function readWorkerIdlePollMs(
+  env: Record<string, string | undefined> = process.env
+): number {
+  const raw = Number(env.WORKER_IDLE_POLL_MS);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_IDLE_POLL_MS;
+  return Math.min(MAX_IDLE_POLL_MS, Math.max(MIN_IDLE_POLL_MS, Math.floor(raw)));
+}
+
+export function computeNextPollDelayMs(
+  tick: LiveTickResult,
+  idlePollMs: number = DEFAULT_IDLE_POLL_MS
+): number {
   switch (tick.kind) {
     case 'cooldown':
       return Math.min(5_000, Math.max(500, tick.waitMs));
@@ -30,7 +44,7 @@ export function computeNextPollDelayMs(tick: LiveTickResult): number {
     case 'failed':
       return 5_000;
     default:
-      return 3_000;
+      return idlePollMs;
   }
 }
 
@@ -158,12 +172,15 @@ export async function processNextLiveBatch(
   provider: TelegramLookupProvider,
   nowMs: number = Date.now()
 ): Promise<LiveTickResult> {
+  // Check queue first so 24/7 idle ticks use only 1 Redis command (ZRANGE) instead of 2
+  const activeJobs = await store.listActiveLiveJobs();
+  if (activeJobs.length === 0) return { kind: 'idle' };
+
   const cooldownUntil = await store.getSessionCooldownUntil();
   if (cooldownUntil && cooldownUntil > nowMs) {
     return { kind: 'cooldown', waitMs: cooldownUntil - nowMs };
   }
 
-  const activeJobs = await store.listActiveLiveJobs();
   const nextJob = pickNextRunnableLiveJob(activeJobs, nowMs);
   if (!nextJob) return { kind: 'idle' };
 

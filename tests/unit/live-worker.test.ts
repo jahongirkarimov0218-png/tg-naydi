@@ -7,14 +7,21 @@ import { appendUniquePhonesToJob, createNewJobRecord } from '@/lib/job-engine';
 import type { TelegramLookupProvider } from '@/lib/providers/types';
 import {
   computeNextPollDelayMs,
+  DEFAULT_IDLE_POLL_MS,
   processNextLiveBatch,
   readWorkerEnvConfig,
+  readWorkerIdlePollMs,
 } from '../../worker/live-processor';
 import {
   extractPersonalChannelUsername,
   mapImportedTelegramUsers,
 } from '../../worker/gramjs-adapter';
 import { loadDotEnvFile } from '../../worker/env-loader';
+import {
+  buildWorkerHealthPayload,
+  startWorkerHealthServer,
+  type WorkerHealthState,
+} from '../../worker/health-server';
 
 describe('Live MTProto worker processor (behavioral tests)', () => {
   const dirs: string[] = [];
@@ -198,7 +205,14 @@ describe('Live MTProto worker processor (behavioral tests)', () => {
     expect(computeNextPollDelayMs({ kind: 'processed', jobId: '1', status: 'running', pauseMs: 15_000 })).toBe(5_000);
     expect(computeNextPollDelayMs({ kind: 'processed', jobId: '1', status: 'completed', pauseMs: 0 })).toBe(500);
     expect(computeNextPollDelayMs({ kind: 'failed', jobId: '1' })).toBe(5_000);
-    expect(computeNextPollDelayMs({ kind: 'idle' })).toBe(3_000);
+    expect(computeNextPollDelayMs({ kind: 'idle' })).toBe(DEFAULT_IDLE_POLL_MS);
+    expect(computeNextPollDelayMs({ kind: 'idle' }, 20_000)).toBe(20_000);
+
+    expect(readWorkerIdlePollMs({})).toBe(15_000);
+    expect(readWorkerIdlePollMs({ WORKER_IDLE_POLL_MS: '1000' })).toBe(3_000);
+    expect(readWorkerIdlePollMs({ WORKER_IDLE_POLL_MS: '120000' })).toBe(60_000);
+    expect(readWorkerIdlePollMs({ WORKER_IDLE_POLL_MS: '20000' })).toBe(20_000);
+    expect(readWorkerIdlePollMs({ WORKER_IDLE_POLL_MS: 'not-a-number' })).toBe(15_000);
 
     expect(() => readWorkerEnvConfig({})).toThrow(/Missing TELEGRAM_API_ID/);
     expect(
@@ -239,5 +253,55 @@ describe('Live MTProto worker processor (behavioral tests)', () => {
       TELEGRAM_API_HASH: 'host-wins',
       UPSTASH_REDIS_REST_URL: 'https://example.upstash.io',
     });
+  });
+
+  it('skips cooldown lookup on empty queue to stay under Upstash Free Tier monthly command budget', async () => {
+    const store = await makeStore();
+    const cooldownSpy = vi.spyOn(store, 'getSessionCooldownUntil');
+    const provider: TelegramLookupProvider = {
+      mode: 'LIVE_MTPROTO',
+      lookupBatch: vi.fn(),
+    };
+
+    const tick = await processNextLiveBatch(store, provider, Date.now());
+    expect(tick.kind).toBe('idle');
+    expect(cooldownSpy).not.toHaveBeenCalled();
+  });
+
+  it('serves Render-compatible /healthz HTTP endpoint with 200 ok, 503 degraded, and 404 handling', async () => {
+    const now = Date.now();
+    const state: WorkerHealthState = {
+      connected: true,
+      lastHeartbeatAtMs: now,
+      startedAtMs: now - 5_000,
+    };
+
+    expect(buildWorkerHealthPayload(state, now).statusCode).toBe(200);
+    expect(
+      buildWorkerHealthPayload({ ...state, lastHeartbeatAtMs: now - 95_000 }, now).statusCode
+    ).toBe(503);
+
+    const handle = await startWorkerHealthServer(0, () => state, '127.0.0.1');
+    try {
+      const okRes = await fetch(`http://127.0.0.1:${handle.port}/healthz`);
+      expect(okRes.status).toBe(200);
+      const okBody = (await okRes.json()) as { status: string; connected: boolean };
+      expect(okBody.status).toBe('ok');
+      expect(okBody.connected).toBe(true);
+
+      const headRes = await fetch(`http://127.0.0.1:${handle.port}/healthz`, { method: 'HEAD' });
+      expect(headRes.status).toBe(200);
+
+      state.connected = false;
+      const degRes = await fetch(`http://127.0.0.1:${handle.port}/`);
+      expect(degRes.status).toBe(503);
+      const degBody = (await degRes.json()) as { status: string };
+      expect(degBody.status).toBe('degraded');
+
+      const notFound = await fetch(`http://127.0.0.1:${handle.port}/unknown`);
+      expect(notFound.status).toBe(404);
+    } finally {
+      await handle.close();
+    }
   });
 });

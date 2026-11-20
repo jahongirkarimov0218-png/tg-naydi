@@ -20,13 +20,15 @@ import {
   mapImportedTelegramUsers,
 } from './gramjs-adapter';
 import { loadDotEnvFile } from './env-loader';
+import { startWorkerHealthServer, type WorkerHealthServerHandle } from './health-server';
 import {
   computeNextPollDelayMs,
   processNextLiveBatch,
   readWorkerEnvConfig,
+  readWorkerIdlePollMs,
 } from './live-processor';
 
-const HEARTBEAT_INTERVAL_MS = 15_000;
+const HEARTBEAT_INTERVAL_MS = 30_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -87,39 +89,74 @@ function requireWorkerStore(): JobStore {
 
 async function runSingleDaemonTick(
   store: JobStore,
-  provider: MtprotoLookupProvider
+  provider: MtprotoLookupProvider,
+  idlePollMs: number
 ): Promise<number> {
   try {
     const tick = await processNextLiveBatch(store, provider);
-    return computeNextPollDelayMs(tick);
+    return computeNextPollDelayMs(tick, idlePollMs);
   } catch (err) {
     logError('Worker loop iteration error', err);
     return 5_000;
   }
 }
 
+function readOptionalHealthPort(env: Record<string, string | undefined> = process.env): number | null {
+  const raw = env.PORT?.trim() || env.WORKER_HEALTH_PORT?.trim();
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 65535 ? parsed : null;
+}
+
 async function runDaemon(): Promise<void> {
   loadDotEnvFile();
   const { apiId, apiHash, sessionStr } = readWorkerEnvConfig();
+  const idlePollMs = readWorkerIdlePollMs();
   const store = requireWorkerStore();
+
+  const startedAtMs = Date.now();
+  let connected = false;
+  let lastHeartbeatAtMs: number | null = null;
+  let healthServer: WorkerHealthServerHandle | null = null;
+
+  const healthPort = readOptionalHealthPort();
+  if (healthPort !== null) {
+    healthServer = await startWorkerHealthServer(healthPort, () => ({
+      connected,
+      lastHeartbeatAtMs,
+      startedAtMs,
+    }));
+    logInfo('Worker health HTTP server listening', { port: healthServer.port });
+  }
 
   const client = new TelegramClient(new StringSession(sessionStr), apiId, apiHash, {
     connectionRetries: 5,
   });
   await client.connect();
-  logInfo('MTProto worker connected cleanly');
+  connected = true;
+  logInfo('MTProto worker connected cleanly', { idlePollMs, heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS });
 
   const provider = new MtprotoLookupProvider(createGramJsClientAdapter(client));
   let active = true;
 
+  const beat = async () => {
+    const now = Date.now();
+    await store.setWorkerHeartbeat(now);
+    lastHeartbeatAtMs = now;
+  };
+
   const heartbeatTimer = setInterval(() => {
-    void store.setWorkerHeartbeat(Date.now()).catch((err) => logError('Heartbeat failed', err));
+    void beat().catch((err) => logError('Heartbeat failed', err));
   }, HEARTBEAT_INTERVAL_MS);
-  await store.setWorkerHeartbeat(Date.now());
+  await beat();
 
   const stop = async () => {
     active = false;
+    connected = false;
     clearInterval(heartbeatTimer);
+    if (healthServer) {
+      await healthServer.close().catch(() => undefined);
+    }
     await client.disconnect();
     logInfo('MTProto worker stopped');
     process.exit(0);
@@ -128,7 +165,7 @@ async function runDaemon(): Promise<void> {
   process.on('SIGTERM', () => void stop());
 
   while (active) {
-    const delayMs = await runSingleDaemonTick(store, provider);
+    const delayMs = await runSingleDaemonTick(store, provider, idlePollMs);
     await sleep(delayMs);
   }
 }

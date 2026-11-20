@@ -1,6 +1,11 @@
 import type { Job, RecentJobMetrics } from '@/lib/types';
 
 export const JOB_TTL_SECONDS = 86_400; // 24 hours PII auto-expiry
+const WORKER_HEARTBEAT_TTL_MS = 90_000; // 3x 30s worker heartbeat interval
+
+export function isWorkerHeartbeatFresh(hb: number | null, nowMs: number = Date.now()): boolean {
+  return hb !== null && nowMs - hb < WORKER_HEARTBEAT_TTL_MS;
+}
 
 function isJobExpired(job: Job, nowMs: number = Date.now()): boolean {
   return Boolean(job.expiresAt && new Date(job.expiresAt).getTime() <= nowMs);
