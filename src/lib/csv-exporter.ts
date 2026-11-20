@@ -9,15 +9,21 @@ export function sanitizeCsvCell(value: string): string {
     return value;
   }
 
-  // Neutralize Excel / Calc formula injection payloads
+  // Neutralize Excel / Calc formula injection payloads (including leading whitespace/newline smuggling)
   const firstChar = value.charAt(0);
+  const firstNonSpace = value.trimStart().charAt(0);
   if (
     firstChar === '=' ||
     firstChar === '\t' ||
     firstChar === '\r' ||
+    firstChar === '\n' ||
     firstChar === '+' ||
     firstChar === '-' ||
-    firstChar === '@'
+    firstChar === '@' ||
+    firstNonSpace === '=' ||
+    firstNonSpace === '+' ||
+    firstNonSpace === '-' ||
+    firstNonSpace === '@'
   ) {
     return `'${value}`;
   }

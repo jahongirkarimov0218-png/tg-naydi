@@ -69,6 +69,8 @@ describe('csv-exporter', () => {
     expect(sanitizeCsvCell('+1+1(cmd)')).toBe("'+1+1(cmd)");
     expect(sanitizeCsvCell('@SUM(A1:A2)')).toBe("'@SUM(A1:A2)");
     expect(sanitizeCsvCell('\t=1+1')).toBe("'\t=1+1");
+    expect(sanitizeCsvCell(' =1+1')).toBe("' =1+1");
+    expect(sanitizeCsvCell('\n=HYPERLINK("x")')).toBe('\'\n=HYPERLINK("x")');
   });
 
   it('builds UTF-8 BOM Excel CSV with mode stamp and onlyFound filter', () => {

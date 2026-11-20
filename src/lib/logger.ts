@@ -8,19 +8,27 @@ export function redactSensitiveText(input: string): string {
     .replace(PHONE_PATTERN, '[REDACTED_PHONE]');
 }
 
+function sanitizeValue(value: unknown, depth: number): unknown {
+  if (depth > 5) return '[TRUNCATED]';
+  if (typeof value === 'string') return redactSensitiveText(value);
+  if (Array.isArray(value)) return value.map((item) => sanitizeValue(item, depth + 1));
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      if (/phone|token|secret|session|hash|password|key/i.test(key)) {
+        out[key] = '[REDACTED]';
+      } else {
+        out[key] = sanitizeValue(nested, depth + 1);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
 function sanitizeMeta(meta?: Record<string, unknown>): Record<string, unknown> | undefined {
   if (!meta) return undefined;
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(meta)) {
-    if (/phone|token|secret|session|hash|password|key/i.test(key)) {
-      out[key] = '[REDACTED]';
-    } else if (typeof value === 'string') {
-      out[key] = redactSensitiveText(value);
-    } else {
-      out[key] = value;
-    }
-  }
-  return out;
+  return sanitizeValue(meta, 0) as Record<string, unknown>;
 }
 
 export function logInfo(message: string, meta?: Record<string, unknown>): void {
