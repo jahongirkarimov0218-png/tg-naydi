@@ -1,4 +1,4 @@
-const PHONE_PATTERN = /\+?\d[\d\s\-()]{8,18}\d/g;
+const PHONE_PATTERN = /(?<![a-fA-F0-9-])\+?\d[\d\s\-()]{8,18}\d(?![a-fA-F0-9-])/g;
 const SECRET_KV_PATTERN =
   /\b(TELEGRAM_SESSION|TELEGRAM_API_HASH|UPSTASH_REDIS_REST_TOKEN|OPERATOR_ACCESS_KEY|jobToken|accessToken)\s*([=:])\s*([^\s,;'"`]+)/gi;
 
