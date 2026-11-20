@@ -231,6 +231,7 @@ export function TgNaydiWorkspace({
 
   const handleStartJob = async () => {
     if (!parsed || parsed.uniquePhones.length === 0) return;
+    actionEpochRef.current += 1;
     setErrorText(null);
     setIsSubmitting(true);
 

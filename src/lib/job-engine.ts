@@ -327,7 +327,11 @@ export async function runSandboxJobStep(store: JobStore, jobId: string): Promise
       });
     } else if (latest.stats.pending === 0) {
       latest.status = 'completed';
+      latest.retryAfterAt = undefined;
       await store.recordJobOutcome('completed');
+    } else if (latest.status === 'rate_limited') {
+      latest.status = 'running';
+      latest.retryAfterAt = undefined;
     }
 
     latest.updatedAt = new Date().toISOString();
