@@ -20,7 +20,8 @@
     "quality:dry": "jscpd src worker --min-tokens 35 --reporters console",
     "quality:knip": "knip",
     "quality:mutate": "stryker run",
-    "smoke:prod": "node scripts/smoke/prod_smoke.mjs"
+    "smoke:prod": "node scripts/smoke/prod_smoke.mjs",
+    "smoke:live-canary": "node scripts/smoke/live_canary.mjs"
   },
   "dependencies": {
     "@upstash/redis": "^1.34.3",
