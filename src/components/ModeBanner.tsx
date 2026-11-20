@@ -81,7 +81,16 @@ export function ModeBanner({
         >
           <span className="inline-flex items-center gap-1.5">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
-            На Vercel не подключён Upstash Redis (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`). Запуск новых проверок отключён до подключения хранилища, чтобы прогресс не терялся после F5.
+            На Vercel не подключён Upstash Redis (
+            <code className="rounded bg-amber-100 px-1 py-0.5 font-mono text-[11px]">
+              UPSTASH_REDIS_REST_URL
+            </code>{' '}
+            /{' '}
+            <code className="rounded bg-amber-100 px-1 py-0.5 font-mono text-[11px]">
+              UPSTASH_REDIS_REST_TOKEN
+            </code>
+            ). Запуск новых проверок отключён до подключения хранилища, чтобы прогресс не терялся
+            после F5.
           </span>
         </div>
       )}

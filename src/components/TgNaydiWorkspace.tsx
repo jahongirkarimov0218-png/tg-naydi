@@ -320,8 +320,8 @@ export function TgNaydiWorkspace({
         </section>
 
         {/* Interactive 2-column Workspace */}
-        <section className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
-          <div className="lg:col-span-5">
+        <section className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+          <div className="lg:sticky lg:top-20 lg:col-span-5">
             <UploadPanel
               providerMode={providerMode}
               storageBlocked={storageMode === 'unconfigured'}

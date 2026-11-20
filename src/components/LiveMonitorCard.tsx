@@ -231,7 +231,7 @@ export function LiveMonitorCard({
 
       {job && job.totalItems > rows.length && (
         <p className="mt-2.5 text-right text-[11px] text-slate-500">
-          Показано {rows.length} из {job.totalItems} номеров — все строки доступны в `result.csv`
+          Показано {rows.length} из {job.totalItems} номеров — все строки доступны в result.csv
         </p>
       )}
     </div>
