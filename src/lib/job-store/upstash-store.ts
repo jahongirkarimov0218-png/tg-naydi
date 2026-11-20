@@ -6,7 +6,16 @@ import { JOB_TTL_SECONDS, type JobStore } from '@/lib/job-store/types';
 const LIVE_QUEUE_KEY = 'tgnaydi:live:queue';
 const GLOBAL_LOCK_KEY = 'tgnaydi:lock:mtproto:session';
 const HEARTBEAT_KEY = 'tgnaydi:worker:heartbeat';
+const COOLDOWN_KEY = 'tgnaydi:mtproto:cooldown_until';
 const METRICS_KEY = 'tgnaydi:metrics:jobs';
+
+const ATOMIC_RELEASE_LUA = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+else
+  return 0
+end
+`;
 
 export class UpstashRedisJobStore implements JobStore {
   private readonly redis: Redis;
@@ -63,10 +72,7 @@ export class UpstashRedisJobStore implements JobStore {
   }
 
   async releaseJobLease(id: string, leaseId: string): Promise<void> {
-    const current = await this.redis.get<string>(this.leaseKey(id));
-    if (current === leaseId) {
-      await this.redis.del(this.leaseKey(id));
-    }
+    await this.redis.eval(ATOMIC_RELEASE_LUA, [this.leaseKey(id)], [leaseId]);
   }
 
   async listActiveLiveJobs(): Promise<Job[]> {
@@ -94,10 +100,7 @@ export class UpstashRedisJobStore implements JobStore {
   }
 
   async releaseGlobalSessionLock(lockId: string): Promise<void> {
-    const current = await this.redis.get<string>(GLOBAL_LOCK_KEY);
-    if (current === lockId) {
-      await this.redis.del(GLOBAL_LOCK_KEY);
-    }
+    await this.redis.eval(ATOMIC_RELEASE_LUA, [GLOBAL_LOCK_KEY], [lockId]);
   }
 
   async setWorkerHeartbeat(timestampMs: number): Promise<void> {
@@ -106,6 +109,16 @@ export class UpstashRedisJobStore implements JobStore {
 
   async getWorkerHeartbeat(): Promise<number | null> {
     const val = await this.redis.get<number>(HEARTBEAT_KEY);
+    return typeof val === 'number' ? val : null;
+  }
+
+  async setSessionCooldownUntil(timestampMs: number): Promise<void> {
+    const ttlSec = Math.max(60, Math.ceil((timestampMs - Date.now()) / 1000) + 60);
+    await this.redis.set(COOLDOWN_KEY, timestampMs, { ex: ttlSec });
+  }
+
+  async getSessionCooldownUntil(): Promise<number | null> {
+    const val = await this.redis.get<number>(COOLDOWN_KEY);
     return typeof val === 'number' ? val : null;
   }
 

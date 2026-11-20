@@ -99,7 +99,16 @@ export function LiveMonitorCard({
   onResume,
   onDelete,
 }: LiveMonitorCardProps) {
-  const rows = job ? job.items.slice(0, 12) : PREVIEW_ROWS;
+  // Sliding window centered on the active pending frontier so large (>12 row) jobs keep scrolling live
+  const rows = (() => {
+    if (!job) return PREVIEW_ROWS;
+    const windowSize = 12;
+    if (job.items.length <= windowSize) return job.items;
+    const firstPending = job.items.findIndex((r) => r.status === 'pending');
+    if (firstPending === -1) return job.items.slice(0, windowSize);
+    const start = Math.max(0, Math.min(firstPending - 3, job.items.length - windowSize));
+    return job.items.slice(start, start + windowSize);
+  })();
   const activeIdx =
     job && job.status === 'running'
       ? rows.findIndex((r) => r.status === 'pending')

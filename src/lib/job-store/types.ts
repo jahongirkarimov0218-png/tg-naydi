@@ -17,6 +17,9 @@ export interface JobStore {
   setWorkerHeartbeat(timestampMs: number): Promise<void>;
   getWorkerHeartbeat(): Promise<number | null>;
 
+  setSessionCooldownUntil(timestampMs: number): Promise<void>;
+  getSessionCooldownUntil(): Promise<number | null>;
+
   recordJobOutcome(outcome: 'completed' | 'failed' | 'rate_limited'): Promise<void>;
   getRecentMetrics(): Promise<RecentJobMetrics>;
 }

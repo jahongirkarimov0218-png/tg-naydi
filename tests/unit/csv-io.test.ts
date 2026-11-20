@@ -56,6 +56,15 @@ describe('csv-parser', () => {
     const parsed = parseCsvBuffer(bytes, 'RU');
     expect(parsed.uniquePhones).toEqual(['+79051234567', '+79631234567']);
   });
+
+  it('selects Тел column over Контактное лицо in Russian CRM exports (regression B4)', () => {
+    const crmCsv =
+      'Контактное лицо;Тел;Город\r\nАнна Петрова;8 (905) 111-45-67;Казань\r\nИван Смирнов;+7 963 222-65-43;Казань\r\n';
+    const bytes = encodeWindows1251(crmCsv);
+    const parsed = parseCsvBuffer(bytes, 'RU');
+    expect(parsed.selectedColumn).toBe('Тел');
+    expect(parsed.uniquePhones).toEqual(['+79051114567', '+79632226543']);
+  });
 });
 
 describe('csv-exporter', () => {

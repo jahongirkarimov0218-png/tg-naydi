@@ -171,6 +171,22 @@ export class FileJobStore implements JobStore {
     }
   }
 
+  async setSessionCooldownUntil(timestampMs: number): Promise<void> {
+    await this.atomicWriteJson(path.join(this.baseDir, 'session-cooldown.json'), {
+      timestampMs,
+    });
+  }
+
+  async getSessionCooldownUntil(): Promise<number | null> {
+    try {
+      const raw = await fs.readFile(path.join(this.baseDir, 'session-cooldown.json'), 'utf-8');
+      const parsed = JSON.parse(raw) as { timestampMs?: number };
+      return typeof parsed.timestampMs === 'number' ? parsed.timestampMs : null;
+    } catch {
+      return null;
+    }
+  }
+
   async recordJobOutcome(outcome: 'completed' | 'failed' | 'rate_limited'): Promise<void> {
     const filePath = path.join(this.baseDir, 'metrics.json');
     let current: MetricsRecord = { completed: 0, failed: 0, rateLimited: 0 };

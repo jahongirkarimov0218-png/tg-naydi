@@ -25,6 +25,14 @@ jobs:
         with:
           node-version: 20
 
+      - name: Restore Rolling Monitoring History Cache
+        uses: actions/cache@v4
+        with:
+          path: docs/sdlc/monitoring/history.json
+          key: tgnaydi-monitoring-history-${{ github.run_id }}
+          restore-keys: |
+            tgnaydi-monitoring-history-
+
       - name: Run Deterministic Anomaly Detector
         id: detector
         env:

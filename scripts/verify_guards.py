@@ -96,6 +96,16 @@ def main() -> None:
             2,
         )
         expect(
+            "Block PowerShell(Remove-Item protected-tests.json)",
+            {"tool_name": "PowerShell", "tool_input": {"command": "Remove-Item -Force .claude/state/protected-tests.json"}},
+            2,
+        )
+        expect(
+            "Block Bash(rm protected-tests.json)",
+            {"tool_name": "Bash", "tool_input": {"command": "rm -f .claude/state/protected-tests.json"}},
+            2,
+        )
+        expect(
             "Allow Edit(production file while test locked)",
             {"tool_name": "Edit", "tool_input": {"file_path": "src/lib/phone-normalizer.ts"}},
             0,

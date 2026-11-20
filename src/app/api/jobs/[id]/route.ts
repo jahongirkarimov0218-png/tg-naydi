@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractJobToken, verifyJobToken } from '@/lib/auth';
+import { extractJobToken, getJobCookieName, verifyJobToken } from '@/lib/auth';
 import { toPublicJobView } from '@/lib/job-engine';
 import { getJobStore } from '@/lib/job-store';
 import { logInfo } from '@/lib/logger';
@@ -65,5 +65,13 @@ export async function DELETE(req: NextRequest, context: RouteContext): Promise<N
 
   await store.deleteJob(id);
   logInfo('Deleted job and PII data immediately', { jobId: id });
-  return NextResponse.json({ deleted: true });
+  const res = NextResponse.json({ deleted: true });
+  res.cookies.set(getJobCookieName(id), '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 0,
+  });
+  return res;
 }

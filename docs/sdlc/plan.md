@@ -63,7 +63,7 @@
 - `src/lib/providers/mtproto.ts` — `MtprotoLookupProvider` (GramJS adapter with `importContacts`, `getFullUser` -> `personalChannelId`, `deleteContacts` in `finally`, `FloodWaitError` mapping; injected client for contract tests).
 - `worker/mtproto.ts` — Standalone Node/TSX daemon polling `JobStore` FIFO live queue with global session mutex & 15s heartbeat.
 - `src/lib/auth.ts` — `generateJobToken`, `hashToken`, `verifyTokenHash`, cookie helpers, `verifyOperatorAccess`.
-- `src/lib/job-engine.ts` — `createDraftJob`, `appendJobChunks`, `startJob`, `stepJob`, `pauseJob`, `resumeJob`, `computeJobStats`, `toPublicJobView`.
+- `src/lib/job-engine.ts` — `createNewJobRecord`, `appendUniquePhonesToJob`, `runSandboxJobStep`, `clampBatchConfig`, `computeJobStats`, `toPublicJobView`.
 - `src/app/api/health/route.ts` — `GET /api/health`.
 - `src/app/api/auth/operator/route.ts` — `POST /api/auth/operator`.
 - `src/app/api/jobs/route.ts` — `POST /api/jobs`.

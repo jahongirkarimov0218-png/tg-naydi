@@ -35,6 +35,9 @@ describe('phone-normalizer', () => {
   it('masks Russian and international phones for UI display', () => {
     expect(maskPhone('+79051234567')).toBe('+7 905 •••-45-67');
     expect(maskPhone('+998901234567')).toBe('+998 90 •••-45-67');
+    const shortMask = maskPhone('+1234567');
+    expect(shortMask).toContain('•••');
+    expect(shortMask).not.toContain('345');
   });
 
   it('deduplicates canonical E.164 numbers while preserving order and counts', () => {

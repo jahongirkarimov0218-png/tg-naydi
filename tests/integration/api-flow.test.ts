@@ -228,6 +228,17 @@ describe('TG Naydi API end-to-end integration flow', () => {
       { params: Promise.resolve({ id: job.id }) }
     );
     expect(stepTooSoon.status).toBe(429);
+
+    // Regression B1: pause -> start during active FLOOD_WAIT MUST NOT bypass cooldown
+    await pausePOST(
+      new NextRequest(`http://localhost/api/jobs/${job.id}/pause`, { method: 'POST', headers: { cookie } }),
+      { params: Promise.resolve({ id: job.id }) }
+    );
+    const startBypassAttempt = await startPOST(
+      new NextRequest(`http://localhost/api/jobs/${job.id}/start`, { method: 'POST', headers: { cookie } }),
+      { params: Promise.resolve({ id: job.id }) }
+    );
+    expect(startBypassAttempt.status).toBe(429);
   });
 
   it('enforces operator key, safety floors, and worker delegation in LIVE_MTPROTO mode', async () => {

@@ -28,15 +28,19 @@ export async function GET(req: NextRequest, context: RouteContext): Promise<Next
   const onlyFound = req.nextUrl.searchParams.get('onlyFound') === '1';
 
   const csvContent = buildResultCsv(job, { delimiter, onlyFound });
-  const safeBase = job.fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_') || 'result';
+  const rawBase = job.fileName.replace(/\.[^.]+$/, '');
+  const asciiBase = rawBase
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'contacts';
   const suffix = onlyFound ? '_only_usernames' : '';
-  const downloadName = `result_${safeBase}${suffix}.csv`;
+  const asciiDownloadName = `result_${asciiBase}${suffix}.csv`;
+  const utf8DownloadName = encodeURIComponent(`result_${rawBase || 'contacts'}${suffix}.csv`);
 
   return new NextResponse(csvContent, {
     status: 200,
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${downloadName}"`,
+      'Content-Disposition': `attachment; filename="${asciiDownloadName}"; filename*=UTF-8''${utf8DownloadName}`,
       'Cache-Control': 'no-store',
     },
   });

@@ -280,8 +280,14 @@ export async function runSandboxJobStep(store: JobStore, jobId: string): Promise
       { alreadyTriggeredFloodPhones: alreadyTriggered }
     );
 
+    // Re-read right before committing to prevent resurrecting deleted PII or clobbering concurrent pause
+    const latest = await store.getJob(jobId);
+    if (!latest) {
+      return null;
+    }
+
     const checkedAt = new Date().toISOString();
-    for (const item of fresh.items) {
+    for (const item of latest.items) {
       const outcome = batchRes.items[item.phone];
       if (!outcome) continue;
       item.checkedAt = checkedAt;
@@ -302,28 +308,31 @@ export async function runSandboxJobStep(store: JobStore, jobId: string): Promise
       }
     }
 
-    fresh.stats = computeJobStats(fresh.items);
+    latest.stats = computeJobStats(latest.items);
 
     if (batchRes.floodWaitSeconds && batchRes.floodWaitSeconds > 0) {
       const blockedPhone = pending.find((p) => !(p.phone in batchRes.items))?.phone;
-      if (blockedPhone && !alreadyTriggered.includes(blockedPhone)) {
-        fresh.floodWaitTriggeredPhones = [...alreadyTriggered, blockedPhone];
+      const latestTriggered = latest.floodWaitTriggeredPhones ?? [];
+      if (blockedPhone && !latestTriggered.includes(blockedPhone)) {
+        latest.floodWaitTriggeredPhones = [...latestTriggered, blockedPhone];
       }
-      fresh.status = 'rate_limited';
-      fresh.retryAfterAt = new Date(Date.now() + batchRes.floodWaitSeconds * 1000).toISOString();
+      latest.retryAfterAt = new Date(Date.now() + batchRes.floodWaitSeconds * 1000).toISOString();
+      if (latest.status !== 'paused') {
+        latest.status = 'rate_limited';
+      }
       await store.recordJobOutcome('rate_limited');
       logInfo('Sandbox job hit simulated FLOOD_WAIT cooldown', {
-        jobId: fresh.id,
+        jobId: latest.id,
         retryAfterSec: batchRes.floodWaitSeconds,
       });
-    } else if (fresh.stats.pending === 0) {
-      fresh.status = 'completed';
+    } else if (latest.stats.pending === 0) {
+      latest.status = 'completed';
       await store.recordJobOutcome('completed');
     }
 
-    fresh.updatedAt = new Date().toISOString();
-    await store.saveJob(fresh);
-    return { kind: 'ok', job: fresh };
+    latest.updatedAt = new Date().toISOString();
+    await store.saveJob(latest);
+    return { kind: 'ok', job: latest };
   } finally {
     await store.releaseJobLease(jobId, leaseId);
   }

@@ -192,14 +192,24 @@ def main() -> None:
                 file_path,
             )
 
-    # Also block shell mutation of locked test files during active bugfix
+    # Also block shell mutation of locked test files or the lockfile itself during active bugfix
     if protected and tool_name in {"Bash", "PowerShell"} and command:
         cmd_norm = command.replace("\\", "/").lower()
-        for locked in protected:
-            if locked != "*" and locked in cmd_norm and re.search(
-                r"(?i)(>|sed\s+-i|perl\s+-pi|Set-Content|Out-File|Add-Content|rm\s|Remove-Item|git\s+checkout\s+--)",
+        mutation_re = re.compile(
+            r"(?i)(>|sed\s+-i|perl\s+-pi|Set-Content|Out-File|Add-Content|Clear-Content|rm\s|Remove-Item|\bdel\s|\berase\s|\bmv\s|Move-Item|Rename-Item|git\s+checkout\s+--|unlink\()"
+        )
+        if (
+            "protected-tests.json" in cmd_norm
+            and os.environ.get("TGNAYDI_ALLOW_UNLOCK") != "1"
+            and mutation_re.search(command)
+        ):
+            block(
+                tool_name,
+                "Shell command attempts to delete or modify .claude/state/protected-tests.json without TGNAYDI_ALLOW_UNLOCK=1.",
                 command,
-            ):
+            )
+        for locked in protected:
+            if locked != "*" and locked in cmd_norm and mutation_re.search(command):
                 block(
                     tool_name,
                     f"Shell command attempts to modify locked test file '{locked}' during bugfix.",

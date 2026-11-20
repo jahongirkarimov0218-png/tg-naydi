@@ -16,7 +16,7 @@ import { Api, TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import bigInt from 'big-integer';
 import { getJobStore } from '@/lib/job-store';
-import { logError, logInfo } from '@/lib/logger';
+import { logError, logInfo, redactSensitiveText } from '@/lib/logger';
 import {
   MtprotoLookupProvider,
   type ImportedTelegramContact,
@@ -150,7 +150,16 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void stop());
 
   while (!shuttingDown) {
+    let postBatchPauseMs = 0;
+
     try {
+      // Enforce session-wide Telegram cooldown (FLOOD_WAIT or inter-batch pause) across ALL live jobs
+      const cooldownUntil = await store.getSessionCooldownUntil();
+      if (cooldownUntil && cooldownUntil > Date.now()) {
+        await sleep(Math.min(5_000, cooldownUntil - Date.now()));
+        continue;
+      }
+
       const activeJobs = await store.listActiveLiveJobs();
       const now = Date.now();
       const nextJob = activeJobs.find((j) => {
@@ -195,10 +204,35 @@ async function main(): Promise<void> {
         fresh.updatedAt = new Date().toISOString();
         await store.saveJob(fresh);
 
-        const result = await provider.lookupBatch(pending.map((p) => p.phone));
-        const checkedAt = new Date().toISOString();
+        let result;
+        try {
+          result = await provider.lookupBatch(pending.map((p) => p.phone));
+        } catch (providerErr) {
+          // Mark unrecoverable provider/account failure as failed so it does not spin forever
+          const latestOnErr = await store.getJob(nextJob.id);
+          if (latestOnErr) {
+            latestOnErr.status = 'failed';
+            latestOnErr.lastError = redactSensitiveText(
+              providerErr instanceof Error ? providerErr.message : String(providerErr)
+            );
+            latestOnErr.updatedAt = new Date().toISOString();
+            await store.saveJob(latestOnErr);
+            await store.recordJobOutcome('failed');
+          }
+          logError('Live MTProto job failed with unrecoverable error', providerErr, {
+            jobId: nextJob.id,
+          });
+          continue;
+        }
 
-        for (const item of fresh.items) {
+        // Re-read right before saving to prevent resurrecting deleted PII or overwriting concurrent pause
+        const latest = await store.getJob(nextJob.id);
+        if (!latest) {
+          continue;
+        }
+
+        const checkedAt = new Date().toISOString();
+        for (const item of latest.items) {
           const outcome = result.items[item.phone];
           if (!outcome) continue;
           item.checkedAt = checkedAt;
@@ -219,25 +253,35 @@ async function main(): Promise<void> {
           }
         }
 
-        fresh.stats = computeJobStats(fresh.items);
+        latest.stats = computeJobStats(latest.items);
         if (result.floodWaitSeconds && result.floodWaitSeconds > 0) {
-          fresh.status = 'rate_limited';
-          fresh.retryAfterAt = new Date(Date.now() + result.floodWaitSeconds * 1000).toISOString();
+          const cooldownTs = Date.now() + result.floodWaitSeconds * 1000;
+          latest.retryAfterAt = new Date(cooldownTs).toISOString();
+          if (latest.status !== 'paused') {
+            latest.status = 'rate_limited';
+          }
+          await store.setSessionCooldownUntil(cooldownTs);
           await store.recordJobOutcome('rate_limited');
-          logInfo('Live job hit FLOOD_WAIT; respecting Telegram cooldown', {
-            jobId: fresh.id,
+          logInfo('Live job hit FLOOD_WAIT; enforcing session-wide cooldown', {
+            jobId: latest.id,
             retryAfterSec: result.floodWaitSeconds,
           });
-        } else if (fresh.stats.pending === 0) {
-          fresh.status = 'completed';
+        } else if (latest.stats.pending === 0) {
+          latest.status = 'completed';
           await store.recordJobOutcome('completed');
+        } else {
+          // Enforce inter-batch pause session-wide and sleep outside the mutex lock
+          await store.setSessionCooldownUntil(Date.now() + safePauseMs);
+          postBatchPauseMs = safePauseMs;
         }
-        fresh.updatedAt = new Date().toISOString();
-        await store.saveJob(fresh);
-
-        await sleep(safePauseMs);
+        latest.updatedAt = new Date().toISOString();
+        await store.saveJob(latest);
       } finally {
         await store.releaseGlobalSessionLock(globalLock);
+      }
+
+      if (postBatchPauseMs > 0) {
+        await sleep(Math.min(postBatchPauseMs, 5_000));
       }
     } catch (err) {
       logError('Worker loop iteration error', err);

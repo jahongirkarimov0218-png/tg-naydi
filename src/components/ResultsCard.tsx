@@ -179,7 +179,8 @@ export function ResultsCard({ job, filter, onFilterChange }: ResultsCardProps) {
                   ['all', 'Все'],
                   ['person', 'Человек'],
                   ['channel', 'Канал'],
-                ] as const
+                  ...(job.stats.botWithUsername > 0 ? ([['bot', 'Бот']] as const) : []),
+                ] as Array<readonly ['all' | 'person' | 'channel' | 'bot', string]>
               ).map(([key, label]) => (
                 <button
                   key={key}

@@ -63,9 +63,16 @@ export function maskPhone(e164: string): string {
     const tail2 = clean.slice(11, 13);
     return `+998 ${area} •••-${tail1}-${tail2}`;
   }
-  // Generic E.164 mask preserving country hint + last 4 digits
+  // Generic E.164 mask: always hide at least 3 middle digits even on short 7-8 digit international numbers
   if (/^\+\d{7,15}$/.test(clean)) {
-    const prefix = clean.slice(0, Math.min(5, clean.length - 4));
+    const digitsCount = clean.length - 1;
+    if (digitsCount <= 8) {
+      const prefix = clean.slice(0, 3);
+      const tail = clean.slice(-2);
+      return `${prefix} •••-${tail}`;
+    }
+    const prefixLen = Math.min(5, clean.length - 7);
+    const prefix = clean.slice(0, Math.max(3, prefixLen));
     const tail1 = clean.slice(-4, -2);
     const tail2 = clean.slice(-2);
     return `${prefix} •••-${tail1}-${tail2}`;

@@ -19,7 +19,8 @@ export interface ParsedCsvResult {
   invalidRows: number;
 }
 
-const PHONE_HEADER_RE = /phone|телефон|номер|тел\b|mobile|мобил|tel\b|contact|контакт/i;
+const PHONE_HEADER_RE =
+  /(?:^|[\s._/-])(?:phone|телефон|номер|тел|mobile|мобил|tel)(?:$|[\s._/-])|phone|телефон|номер|мобил/i;
 
 export function decodeCsvBytes(bytes: Uint8Array): DecodedCsv {
   // Strip UTF-8 BOM if present
@@ -65,31 +66,39 @@ export function detectPhoneColumn(
   rows: Record<string, string>[],
   defaultCountry: SupportedCountry
 ): { selectedColumn: string; ambiguous: boolean } {
-  const headerMatches = headers.filter((h) => PHONE_HEADER_RE.test(h));
-  if (headerMatches.length === 1) {
-    return { selectedColumn: headerMatches[0], ambiguous: false };
-  }
-
   const sample = rows.slice(0, 20);
   const scored = headers.map((header) => {
     const nonEmpty = sample
       .map((r) => (r[header] ?? '').trim())
       .filter((v) => v.length > 0);
-    if (nonEmpty.length === 0) return { header, ratio: 0 };
-    const validCount = nonEmpty.filter((v) => normalizePhone(v, defaultCountry) !== null).length;
-    return { header, ratio: validCount / nonEmpty.length };
+    const ratio =
+      nonEmpty.length === 0
+        ? 0
+        : nonEmpty.filter((v) => normalizePhone(v, defaultCountry) !== null).length /
+          nonEmpty.length;
+    const headerMatch = PHONE_HEADER_RE.test(header);
+    return { header, ratio, headerMatch };
   });
 
-  scored.sort((a, b) => b.ratio - a.ratio);
+  // Sort primarily by actual valid phone ratio, using explicit phone header name as tie-breaker
+  scored.sort((a, b) => {
+    if (Math.abs(b.ratio - a.ratio) >= 0.15) return b.ratio - a.ratio;
+    if (a.headerMatch !== b.headerMatch) return a.headerMatch ? -1 : 1;
+    return b.ratio - a.ratio;
+  });
 
   const strong = scored.filter((s) => s.ratio >= 0.5);
   if (strong.length >= 1) {
-    const ambiguous = strong.length > 1 && strong[0].ratio - strong[1].ratio < 0.15;
+    const ambiguous =
+      strong.length > 1 &&
+      Math.abs(strong[0].ratio - strong[1].ratio) < 0.15 &&
+      strong[0].headerMatch === strong[1].headerMatch;
     return { selectedColumn: strong[0].header, ambiguous };
   }
 
-  if (headerMatches.length > 1) {
-    return { selectedColumn: headerMatches[0], ambiguous: true };
+  const headerMatches = scored.filter((s) => s.headerMatch);
+  if (headerMatches.length >= 1) {
+    return { selectedColumn: headerMatches[0].header, ambiguous: headerMatches.length > 1 };
   }
 
   return { selectedColumn: headers[0] ?? 'phone', ambiguous: headers.length > 1 };

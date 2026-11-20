@@ -17,6 +17,7 @@ import { LandingSections } from '@/components/LandingSections';
 
 const LAST_JOB_KEY = 'tgnaydi:lastJobId';
 const UPLOAD_CHUNK_SIZE = 500;
+const MAX_CLIENT_FILE_BYTES = 20 * 1024 * 1024; // 20 MB per spec.md §3.1
 
 interface TgNaydiWorkspaceProps {
   initialProviderMode: ProviderMode;
@@ -55,6 +56,7 @@ export function TgNaydiWorkspace({
   const [operatorError, setOperatorError] = useState<string | null>(null);
 
   const steppingRef = useRef(false);
+  const actionEpochRef = useRef(0);
 
   const syncUrlWithJob = (jobId: string | null) => {
     const url = new URL(window.location.href);
@@ -68,22 +70,27 @@ export function TgNaydiWorkspace({
     window.history.replaceState({}, '', url.toString());
   };
 
-  const fetchJobFromServer = useCallback(async (jobId: string) => {
-    try {
-      const res = await fetch(`/api/jobs/${jobId}?limit=200`, { cache: 'no-store' });
-      if (!res.ok) {
-        if (res.status === 404 || res.status === 401) {
-          syncUrlWithJob(null);
-          setJob(null);
+  const fetchJobFromServer = useCallback(
+    async (jobId: string, activeFilter: 'all' | 'person' | 'channel' | 'bot' = 'all') => {
+      try {
+        const res = await fetch(`/api/jobs/${jobId}?limit=200&filter=${activeFilter}`, {
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          if (res.status === 404 || res.status === 401) {
+            syncUrlWithJob(null);
+            setJob(null);
+          }
+          return;
         }
-        return;
+        const data = (await res.json()) as { job: PublicJobView };
+        setJob(data.job);
+      } catch {
+        // keep existing UI state on transient network glitch
       }
-      const data = (await res.json()) as { job: PublicJobView };
-      setJob(data.job);
-    } catch {
-      // keep existing UI state on transient network glitch
-    }
-  }, []);
+    },
+    []
+  );
 
   // F5 recovery: restore ONLY jobId from URL / localStorage pointer, fetch truth from server JobStore
   useEffect(() => {
@@ -116,11 +123,19 @@ export function TgNaydiWorkspace({
     if (!job) return;
 
     if (job.status === 'rate_limited') {
-      const waitMs = Math.max(1000, (job.retryAfterSec ?? 1) * 1000);
-      const timer = setTimeout(() => {
-        void fetchJobFromServer(job.id);
-      }, Math.min(waitMs, 1000));
-      return () => clearTimeout(timer);
+      const remaining = job.retryAfterSec ?? 0;
+      // Local 1s countdown without hammering /api/jobs/[id] once cooldown hits 0
+      if (remaining > 0) {
+        const timer = setTimeout(() => {
+          setJob((prev) => {
+            if (!prev || prev.id !== job.id || prev.status !== 'rate_limited') return prev;
+            const nextSec = Math.max(0, (prev.retryAfterSec ?? 1) - 1);
+            return { ...prev, retryAfterSec: nextSec };
+          });
+        }, 1000);
+        return () => clearTimeout(timer);
+      }
+      return;
     }
 
     if (job.status !== 'running' && job.status !== 'queued') {
@@ -129,21 +144,44 @@ export function TgNaydiWorkspace({
 
     if (job.providerMode === 'LIVE_MTPROTO') {
       const timer = setInterval(() => {
-        void fetchJobFromServer(job.id);
+        void fetchJobFromServer(job.id, filter);
       }, 2500);
       return () => clearInterval(timer);
     }
 
-    // SANDBOX step driver
+    // SANDBOX step driver with error handling & stale-response guard
+    const capturedEpoch = actionEpochRef.current;
+    const capturedJobId = job.id;
     const timer = setTimeout(async () => {
       if (steppingRef.current) return;
       steppingRef.current = true;
       setIsStepping(true);
       try {
-        const res = await fetch(`/api/jobs/${job.id}/step`, { method: 'POST' });
+        const res = await fetch(`/api/jobs/${capturedJobId}/step`, { method: 'POST' });
+        if (actionEpochRef.current !== capturedEpoch) {
+          return;
+        }
         if (res.ok || res.status === 429) {
           const data = (await res.json()) as { job?: PublicJobView };
-          if (data.job) setJob(data.job);
+          if (data.job && actionEpochRef.current === capturedEpoch) {
+            setJob(data.job);
+            setErrorText(null);
+          }
+        } else {
+          const err = (await res.json().catch(() => ({}))) as { error?: string };
+          setErrorText(
+            err.error || `Сервер вернул ошибку (${res.status}) при обработке пачки. Попробуйте продолжить.`
+          );
+          setJob((prev) =>
+            prev && prev.id === capturedJobId ? { ...prev, status: 'paused' } : prev
+          );
+        }
+      } catch {
+        if (actionEpochRef.current === capturedEpoch) {
+          setErrorText('Сбой сети при обработке пачки. Нажмите «Продолжить» после восстановления связи.');
+          setJob((prev) =>
+            prev && prev.id === capturedJobId ? { ...prev, status: 'paused' } : prev
+          );
         }
       } finally {
         steppingRef.current = false;
@@ -152,7 +190,7 @@ export function TgNaydiWorkspace({
     }, job.pauseMs);
 
     return () => clearTimeout(timer);
-  }, [job, fetchJobFromServer]);
+  }, [job, filter, fetchJobFromServer]);
 
   const reparse = (bytes: Uint8Array, country: SupportedCountry, colOverride?: string) => {
     const result = parseCsvBuffer(bytes, country, colOverride);
@@ -162,6 +200,10 @@ export function TgNaydiWorkspace({
 
   const handleFileSelected = async (file: File) => {
     setErrorText(null);
+    if (file.size > MAX_CLIENT_FILE_BYTES) {
+      setErrorText('Файл превышает лимит 20 МБ. Разбейте базу на части или удалите лишние колонки.');
+      return;
+    }
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
     setRawBytes(bytes);
@@ -254,6 +296,7 @@ export function TgNaydiWorkspace({
 
   const handlePause = async () => {
     if (!job) return;
+    actionEpochRef.current += 1;
     const res = await fetch(`/api/jobs/${job.id}/pause`, { method: 'POST' });
     if (res.ok) {
       const data = (await res.json()) as { job: PublicJobView };
@@ -263,6 +306,8 @@ export function TgNaydiWorkspace({
 
   const handleResume = async () => {
     if (!job) return;
+    actionEpochRef.current += 1;
+    setErrorText(null);
     const res = await fetch(`/api/jobs/${job.id}/resume`, { method: 'POST' });
     if (res.ok || res.status === 429) {
       const data = (await res.json()) as { job?: PublicJobView };
@@ -272,10 +317,18 @@ export function TgNaydiWorkspace({
 
   const handleDelete = async () => {
     if (!job) return;
+    actionEpochRef.current += 1;
     const res = await fetch(`/api/jobs/${job.id}`, { method: 'DELETE' });
     if (res.ok) {
       syncUrlWithJob(null);
       setJob(null);
+    }
+  };
+
+  const handleFilterChange = (nextFilter: 'all' | 'person' | 'channel' | 'bot') => {
+    setFilter(nextFilter);
+    if (job) {
+      void fetchJobFromServer(job.id, nextFilter);
     }
   };
 
@@ -352,7 +405,7 @@ export function TgNaydiWorkspace({
               onDelete={() => void handleDelete()}
             />
 
-            {job && <ResultsCard job={job} filter={filter} onFilterChange={setFilter} />}
+            {job && <ResultsCard job={job} filter={filter} onFilterChange={handleFilterChange} />}
           </div>
         </section>
 
