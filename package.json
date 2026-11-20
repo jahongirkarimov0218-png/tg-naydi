@@ -14,6 +14,7 @@
     "eval:claude-ab": "node scripts/evals/run_claude_ab.mjs",
     "test:e2e": "playwright test",
     "worker:mtproto": "tsx worker/mtproto.ts",
+    "worker:session": "node scripts/worker/generate_session.mjs",
     "quality:coverage": "vitest run tests/unit tests/integration --coverage",
     "quality:crap": "pnpm run quality:coverage && node scripts/quality/crap_report.mjs",
     "quality:dry": "jscpd src worker --min-tokens 35 --reporters console",
