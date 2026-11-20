@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js / Build
+.next/
+out/
+build/
+dist/
+coverage/
+
+# Secrets & Credentials (NEVER commit)
+.env
+.env.*
+!.env.example
+*.session
+*.session-journal
+secrets/
+
+# Local runtime data & PII (NEVER commit)
+.data/
+tmp/
+*.sqlite
+*.db
+
+# Testing & Playwright
+playwright-report/
+test-results/
+
+# Vercel
+.vercel/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
