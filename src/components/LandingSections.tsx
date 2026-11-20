@@ -47,7 +47,7 @@ export function LandingSections() {
     <div className="space-y-12 pt-10">
       {/* 3 numbered steps */}
       <Card className="p-6 sm:p-8">
-        <h2 className="mb-6 text-lg font-semibold tracking-tight text-zinc-950">
+        <h2 className="mb-6 text-lg font-semibold tracking-tight text-balance text-zinc-950">
           Как это работает
         </h2>
         <div className="relative space-y-6">
@@ -57,9 +57,11 @@ export function LandingSections() {
               <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 font-mono text-xs font-semibold text-zinc-900 tabular-nums ring-4 ring-white">
                 {step.num}
               </div>
-              <div>
-                <h3 className="text-sm font-semibold text-zinc-950">{step.title}</h3>
-                <p className="mt-1 text-sm leading-relaxed text-zinc-500">{step.desc}</p>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-balance text-zinc-950">{step.title}</h3>
+                <p className="mt-1 max-w-[65ch] text-sm leading-relaxed text-pretty text-zinc-600">
+                  {step.desc}
+                </p>
               </div>
             </div>
           ))}
@@ -68,8 +70,10 @@ export function LandingSections() {
 
       {/* 4 use-case cards */}
       <section>
-        <h2 className="text-xl font-semibold tracking-tight text-zinc-950">Где это пригодится</h2>
-        <p className="mt-1.5 text-sm text-zinc-500">
+        <h2 className="text-xl font-semibold tracking-tight text-balance text-zinc-950">
+          Где это пригодится
+        </h2>
+        <p className="mt-1.5 text-sm text-pretty text-zinc-600">
           Подходит для своей базы: клиенты, заявки, партнёры.
         </p>
 
@@ -85,9 +89,13 @@ export function LandingSections() {
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-900">
                     <Icon className="h-4 w-4" strokeWidth={1.75} />
                   </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-zinc-950">{card.title}</h3>
-                    <p className="mt-1 text-sm leading-relaxed text-zinc-500">{card.desc}</p>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-balance text-zinc-950">
+                      {card.title}
+                    </h3>
+                    <p className="mt-1 text-sm leading-relaxed text-pretty text-zinc-600">
+                      {card.desc}
+                    </p>
                   </div>
                 </div>
               </Card>
@@ -97,10 +105,10 @@ export function LandingSections() {
       </section>
 
       {/* Compliance & PII footer */}
-      <footer className="rounded-xl border border-zinc-200/80 bg-zinc-50/70 p-4 text-xs leading-relaxed text-zinc-500">
+      <footer className="rounded-xl border border-zinc-200/80 bg-zinc-50/70 p-4 text-xs leading-relaxed text-zinc-600">
         <div className="flex items-start gap-2.5">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" strokeWidth={1.75} />
-          <p>
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" strokeWidth={1.75} />
+          <p className="max-w-[75ch] text-pretty">
             Сервис предназначен только для работы с собственной CRM-базой клиентов и заявок с
             соблюдением правил Telegram и законодательства о персональных данных. Номера в
             интерфейсе маскируются, доступ к задаче защищён секретным токеном, а загруженные базы

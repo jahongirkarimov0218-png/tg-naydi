@@ -46,18 +46,25 @@ export function ResultsCard({ job, filter, onFilterChange }: ResultsCardProps) {
 
   return (
     <div data-testid="results-card" className="space-y-4">
+      <span className="sr-only" aria-live="polite">
+        {copiedHandle ? `Скопировано ${copiedHandle}` : ''}
+      </span>
+
       {/* Pipeline progress card */}
       <Card className="p-5 sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3 sm:max-w-[45%]">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-900">
               <FileSpreadsheet className="h-4 w-4" strokeWidth={1.75} />
             </div>
-            <div>
-              <div className="text-sm font-semibold tracking-tight text-zinc-950">
+            <div className="min-w-0">
+              <div
+                title={job.fileName}
+                className="truncate text-sm font-semibold tracking-tight text-zinc-950"
+              >
                 {job.fileName}
               </div>
-              <div className="text-xs text-zinc-500 tabular-nums">{job.stats.total} номеров</div>
+              <div className="text-xs text-zinc-600 tabular-nums">{job.stats.total} номеров</div>
             </div>
           </div>
 
@@ -70,7 +77,7 @@ export function ResultsCard({ job, filter, onFilterChange }: ResultsCardProps) {
           <div className="flex flex-row-reverse items-center justify-end gap-3 sm:flex-row">
             <div className="text-left sm:text-right">
               <div className="text-sm font-semibold tracking-tight text-zinc-950">result.csv</div>
-              <div className="text-xs text-zinc-500">username и тип</div>
+              <div className="text-xs text-zinc-600">username и тип</div>
             </div>
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-900">
               <FileCheck2 className="h-4 w-4" strokeWidth={1.75} />
@@ -84,7 +91,7 @@ export function ResultsCard({ job, filter, onFilterChange }: ResultsCardProps) {
               job.status === 'completed'
                 ? 'text-emerald-700'
                 : job.status === 'paused' || job.status === 'rate_limited'
-                  ? 'text-amber-700'
+                  ? 'text-amber-800'
                   : 'text-zinc-900'
             }
           >
@@ -96,14 +103,24 @@ export function ResultsCard({ job, filter, onFilterChange }: ResultsCardProps) {
                   ? `Пауза FLOOD_WAIT (${job.retryAfterSec ?? 0}с)`
                   : 'Проверяем пачками...'}
           </span>
-          <span data-testid="progress-counter" className="font-mono text-zinc-500 tabular-nums">
+          <span data-testid="progress-counter" className="font-mono text-zinc-600 tabular-nums">
             {job.stats.processed} из {job.stats.total}
           </span>
         </div>
 
-        <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-zinc-100">
+        <div
+          role="progressbar"
+          aria-label="Прогресс проверки"
+          aria-valuenow={progressPct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-zinc-100"
+        >
           <div
-            className={cn('h-full rounded-full transition-all duration-300', progressColorClass)}
+            className={cn(
+              'h-full rounded-full transition-[width] duration-300 motion-reduce:transition-none',
+              progressColorClass
+            )}
             style={{ width: `${progressPct}%` }}
           />
         </div>
@@ -112,18 +129,21 @@ export function ResultsCard({ job, filter, onFilterChange }: ResultsCardProps) {
       {/* Summary KPI + export + found handles */}
       <Card className="p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-900">
-              <Check className="h-4 w-4 text-emerald-600" strokeWidth={1.75} />
+              <Check className="h-4 w-4 text-emerald-700" strokeWidth={1.75} />
             </div>
-            <div>
-              <div className="text-sm font-semibold tracking-tight text-zinc-950">
+            <div className="min-w-0 flex-1">
+              <div
+                title={job.fileName}
+                className="truncate text-sm font-semibold tracking-tight text-zinc-950"
+              >
                 {job.fileName}
               </div>
               <div
                 className={cn(
-                  'text-[11px] font-medium tabular-nums',
-                  job.status === 'completed' ? 'text-emerald-700' : 'text-zinc-500'
+                  'text-xs font-medium tabular-nums',
+                  job.status === 'completed' ? 'text-emerald-700' : 'text-zinc-600'
                 )}
               >
                 {job.status === 'completed' ? 'готово' : `прогресс ${progressPct}%`} · режим{' '}
@@ -157,67 +177,71 @@ export function ResultsCard({ job, filter, onFilterChange }: ResultsCardProps) {
             job.stats.botWithUsername > 0 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'
           )}
         >
-          <div className="rounded-lg border border-zinc-200/80 bg-zinc-50/50 p-3 sm:p-3.5">
+          <div className="min-w-0 rounded-lg border border-zinc-200/80 bg-zinc-50/50 p-3 sm:p-3.5">
             <div
               data-testid="stat-found-total"
-              className="text-2xl font-semibold tracking-tight text-zinc-950 tabular-nums"
+              className="truncate text-xl font-semibold tracking-tight text-zinc-950 tabular-nums sm:text-2xl"
             >
               {job.stats.foundWithUsername}
             </div>
-            <div className="mt-1 text-xs text-zinc-500">найден username</div>
+            <div className="mt-1 text-xs text-zinc-600">найден username</div>
           </div>
 
-          <div className="rounded-lg border border-zinc-200/80 bg-zinc-50/50 p-3 sm:p-3.5">
+          <div className="min-w-0 rounded-lg border border-zinc-200/80 bg-zinc-50/50 p-3 sm:p-3.5">
             <div
               data-testid="stat-found-person"
-              className="text-2xl font-semibold tracking-tight text-emerald-700 tabular-nums"
+              className="truncate text-xl font-semibold tracking-tight text-emerald-700 tabular-nums sm:text-2xl"
             >
               {job.stats.personWithUsername}
             </div>
-            <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-600">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-700">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600" />
               <span>человек, пиши</span>
             </div>
           </div>
 
-          <div className="rounded-lg border border-zinc-200/80 bg-zinc-50/50 p-3 sm:p-3.5">
+          <div className="min-w-0 rounded-lg border border-zinc-200/80 bg-zinc-50/50 p-3 sm:p-3.5">
             <div
               data-testid="stat-found-channel"
-              className="text-2xl font-semibold tracking-tight text-amber-700 tabular-nums"
+              className="truncate text-xl font-semibold tracking-tight text-amber-800 tabular-nums sm:text-2xl"
             >
               {job.stats.channelWithUsername}
             </div>
-            <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-600">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-700">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-600" />
               <span>канал</span>
             </div>
           </div>
 
           {job.stats.botWithUsername > 0 && (
-            <div className="rounded-lg border border-zinc-200/80 bg-zinc-50/50 p-3 sm:p-3.5">
+            <div className="min-w-0 rounded-lg border border-zinc-200/80 bg-zinc-50/50 p-3 sm:p-3.5">
               <div
                 data-testid="stat-found-bot"
-                className="text-2xl font-semibold tracking-tight text-violet-700 tabular-nums"
+                className="truncate text-xl font-semibold tracking-tight text-violet-800 tabular-nums sm:text-2xl"
               >
                 {job.stats.botWithUsername}
               </div>
-              <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-600">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />
+              <div className="mt-1 flex items-center gap-1.5 text-xs text-zinc-700">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-600" />
                 <span>бот</span>
               </div>
             </div>
           )}
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200/80 pt-4 text-xs text-zinc-500">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200/80 pt-4 text-xs text-zinc-600">
           <span>
             Не найден / скрыт приватностью:{' '}
-            <span className="font-mono font-medium text-zinc-700 tabular-nums">
+            <span className="font-mono font-medium text-zinc-900 tabular-nums">
               {job.stats.notFoundOrHidden}
             </span>
           </span>
 
-          <div className="inline-flex items-center gap-0.5 rounded-lg border border-zinc-200/80 bg-zinc-100/80 p-0.5">
+          <div
+            role="group"
+            aria-label="Фильтр по типу аккаунта"
+            className="inline-flex items-center gap-0.5 rounded-lg border border-zinc-200/80 bg-zinc-100/80 p-0.5"
+          >
             {(
               [
                 ['all', 'Все'],
@@ -229,12 +253,13 @@ export function ResultsCard({ job, filter, onFilterChange }: ResultsCardProps) {
               <button
                 key={key}
                 type="button"
+                aria-pressed={filter === key}
                 onClick={() => onFilterChange(key)}
                 className={cn(
-                  'rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950/20',
+                  'min-h-8 rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950/20 sm:min-h-7',
                   filter === key
                     ? 'bg-white text-zinc-950 shadow-xs'
-                    : 'text-zinc-500 hover:text-zinc-950'
+                    : 'text-zinc-600 hover:text-zinc-950'
                 )}
               >
                 {label}
@@ -249,18 +274,28 @@ export function ResultsCard({ job, filter, onFilterChange }: ResultsCardProps) {
               {foundItems.slice(0, 50).map((item) => (
                 <div
                   key={item.index}
-                  className="flex items-center justify-between gap-2 px-3.5 py-2.5 text-xs transition-colors duration-150 hover:bg-zinc-50/80"
+                  className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-xs transition-colors duration-150 hover:bg-zinc-50/80"
                 >
                   <button
                     type="button"
+                    aria-label={
+                      copiedHandle === item.username
+                        ? `Скопировано ${item.username}`
+                        : `Скопировать ${item.username}`
+                    }
                     onClick={() => item.username && void handleCopy(item.username)}
-                    className="inline-flex items-center gap-1.5 rounded-sm font-mono font-medium text-zinc-900 transition-colors duration-150 hover:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950/20"
+                    className="inline-flex min-w-0 items-center gap-1.5 rounded-sm font-mono font-medium text-zinc-900 transition-colors duration-150 hover:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950/20"
                   >
-                    <span>{item.username}</span>
+                    <span className="truncate" title={item.username}>
+                      {item.username}
+                    </span>
                     {copiedHandle === item.username ? (
-                      <Check className="h-3.5 w-3.5 text-emerald-600" strokeWidth={1.75} />
+                      <Check
+                        className="h-3.5 w-3.5 shrink-0 text-emerald-700"
+                        strokeWidth={1.75}
+                      />
                     ) : (
-                      <Copy className="h-3.5 w-3.5 text-zinc-400" strokeWidth={1.75} />
+                      <Copy className="h-3.5 w-3.5 shrink-0 text-zinc-500" strokeWidth={1.75} />
                     )}
                   </button>
                   <Badge
