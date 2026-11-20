@@ -20,6 +20,12 @@ describe('phone-normalizer', () => {
     expect(normalizePhone('+1 (415) 555-2671', 'RU')).toBe('+14155552671');
   });
 
+  it('handles Excel copy-paste artifacts: NBSP, zero-width spaces, leading apostrophe, and tel: URI', () => {
+    expect(normalizePhone("+7\u00A0(905)\u00A0123-45-67", 'RU')).toBe('+79051234567');
+    expect(normalizePhone("'\u200B8\u00A0905\u00A0123\u00A045\u00A067", 'RU')).toBe('+79051234567');
+    expect(normalizePhone('tel:+79051234567', 'RU')).toBe('+79051234567');
+  });
+
   it('rejects clearly invalid inputs', () => {
     expect(normalizePhone('', 'RU')).toBeNull();
     expect(normalizePhone('12345', 'RU')).toBeNull();
