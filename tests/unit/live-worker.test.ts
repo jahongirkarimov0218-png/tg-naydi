@@ -14,6 +14,7 @@ import {
   extractPersonalChannelUsername,
   mapImportedTelegramUsers,
 } from '../../worker/gramjs-adapter';
+import { loadDotEnvFile } from '../../worker/env-loader';
 
 describe('Live MTProto worker processor (behavioral tests)', () => {
   const dirs: string[] = [];
@@ -207,5 +208,36 @@ describe('Live MTProto worker processor (behavioral tests)', () => {
         TELEGRAM_SESSION: ' sess-xyz ',
       })
     ).toEqual({ apiId: 12345, apiHash: 'hash-abc', sessionStr: 'sess-xyz' });
+  });
+
+  it('loads missing keys from .env.local without overriding existing host env vars', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'tgnaydi-env-'));
+    dirs.push(dir);
+    expect(loadDotEnvFile(path.join(dir, 'nonexistent.env'), {})).toBe(0);
+
+    const envFile = path.join(dir, '.env.local');
+    await fs.writeFile(
+      envFile,
+      [
+        '# comment',
+        'INVALID_LINE',
+        'EMPTY_KEY=',
+        'TELEGRAM_API_ID="99999"',
+        "TELEGRAM_API_HASH='hash-from-file'",
+        'UPSTASH_REDIS_REST_URL=https://example.upstash.io',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const target: Record<string, string | undefined> = {
+      TELEGRAM_API_HASH: 'host-wins',
+    };
+    const count = loadDotEnvFile(envFile, target);
+    expect(count).toBe(2);
+    expect(target).toEqual({
+      TELEGRAM_API_ID: '99999',
+      TELEGRAM_API_HASH: 'host-wins',
+      UPSTASH_REDIS_REST_URL: 'https://example.upstash.io',
+    });
   });
 });
