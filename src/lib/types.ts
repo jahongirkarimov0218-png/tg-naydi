@@ -15,13 +15,8 @@ export type JobStatus =
 
 export type AccountType = 'person' | 'channel' | 'bot';
 
-export type ItemStatus =
-  | 'pending'
-  | 'checking'
-  | 'found'
-  | 'found_no_username'
-  | 'not_found_or_hidden'
-  | 'error';
+/** Branded E.164 phone number parsed once at the input boundary. */
+export type E164Phone = string & { readonly __brand: 'E164Phone' };
 
 export type LookupOutcome =
   | {
@@ -48,30 +43,47 @@ export interface BatchLookupResult {
   floodWaitSeconds?: number;
 }
 
-export interface JobItem {
-  index: number;
-  phone: string; // canonical E.164 (NEVER returned raw in GET /api/jobs/[id])
-  maskedPhone: string;
-  status: ItemStatus;
-  username?: string;
-  accountType?: AccountType;
-  personalUsername?: string;
-  linkedChannel?: string;
-  errorCode?: string;
-  checkedAt?: string;
-}
+/**
+ * Discriminated union making illegal JobItem states unrepresentable at compile time:
+ * - 'found' ALWAYS carries a non-optional username and accountType
+ * - 'error' ALWAYS carries errorCode
+ * - 'pending' / 'not_found_or_hidden' CANNOT carry username or accountType
+ */
+export type JobItemState =
+  | { status: 'pending' | 'checking' }
+  | {
+      status: 'found';
+      username: string;
+      accountType: AccountType;
+      personalUsername?: string;
+      linkedChannel?: string;
+      checkedAt?: string;
+    }
+  | {
+      status: 'found_no_username';
+      accountType: 'person';
+      checkedAt?: string;
+    }
+  | {
+      status: 'not_found_or_hidden';
+      checkedAt?: string;
+    }
+  | {
+      status: 'error';
+      errorCode: string;
+      checkedAt?: string;
+    };
 
-export interface PublicJobItem {
+export type JobItem = {
+  index: number;
+  phone: E164Phone;
+  maskedPhone: string;
+} & JobItemState;
+
+export type PublicJobItem = {
   index: number;
   maskedPhone: string;
-  status: ItemStatus;
-  username?: string;
-  accountType?: AccountType;
-  personalUsername?: string;
-  linkedChannel?: string;
-  errorCode?: string;
-  checkedAt?: string;
-}
+} & JobItemState;
 
 export interface JobStats {
   total: number;
@@ -86,9 +98,8 @@ export interface JobStats {
   errors: number;
 }
 
-export interface Job {
+interface JobBaseMetadata {
   id: string;
-  tokenHash: string;
   fileName: string;
   providerMode: ProviderMode;
   status: JobStatus;
@@ -98,9 +109,7 @@ export interface Job {
   totalSourceRows: number;
   duplicatesRemoved: number;
   invalidRows: number;
-  items: JobItem[];
   stats: JobStats;
-  floodWaitTriggeredPhones?: string[];
   retryAfterAt?: string;
   lastError?: string;
   createdAt: string;
@@ -108,28 +117,18 @@ export interface Job {
   expiresAt: string;
 }
 
-export interface PublicJobView {
-  id: string;
-  fileName: string;
-  providerMode: ProviderMode;
-  status: JobStatus;
-  batchSize: number;
-  pauseMs: number;
-  defaultCountry: SupportedCountry;
-  totalSourceRows: number;
-  duplicatesRemoved: number;
-  invalidRows: number;
-  stats: JobStats;
+export interface Job extends JobBaseMetadata {
+  tokenHash: string;
+  items: JobItem[];
+  floodWaitTriggeredPhones?: string[];
+}
+
+export interface PublicJobView extends JobBaseMetadata {
   items: PublicJobItem[];
   totalItems: number;
   offset: number;
   limit: number;
-  retryAfterAt?: string;
   retryAfterSec?: number;
-  lastError?: string;
-  createdAt: string;
-  updatedAt: string;
-  expiresAt: string;
 }
 
 export interface RecentJobMetrics {

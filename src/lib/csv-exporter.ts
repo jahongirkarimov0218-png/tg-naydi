@@ -1,33 +1,14 @@
-import type { AccountType, ItemStatus, Job } from '@/lib/types';
+import type { Job, JobItem } from '@/lib/types';
 
 const VALID_E164_RE = /^\+\d{7,15}$/;
 const VALID_TG_USERNAME_RE = /^@[a-zA-Z0-9_]{3,32}$/;
+const FORMULA_PREFIX_RE = /^[\s\t\r\n]*[=+\-@]|^[\t\r\n]/;
 
 export function sanitizeCsvCell(value: string): string {
-  if (!value) return '';
-  if (VALID_E164_RE.test(value) || VALID_TG_USERNAME_RE.test(value)) {
+  if (!value || VALID_E164_RE.test(value) || VALID_TG_USERNAME_RE.test(value)) {
     return value;
   }
-
-  // Neutralize Excel / Calc formula injection payloads (including leading whitespace/newline smuggling)
-  const firstChar = value.charAt(0);
-  const firstNonSpace = value.trimStart().charAt(0);
-  if (
-    firstChar === '=' ||
-    firstChar === '\t' ||
-    firstChar === '\r' ||
-    firstChar === '\n' ||
-    firstChar === '+' ||
-    firstChar === '-' ||
-    firstChar === '@' ||
-    firstNonSpace === '=' ||
-    firstNonSpace === '+' ||
-    firstNonSpace === '-' ||
-    firstNonSpace === '@'
-  ) {
-    return `'${value}`;
-  }
-  return value;
+  return FORMULA_PREFIX_RE.test(value) ? `'${value}` : value;
 }
 
 function escapeCsvField(value: string, delimiter: ';' | ','): string {
@@ -43,16 +24,43 @@ function escapeCsvField(value: string, delimiter: ';' | ','): string {
   return safe;
 }
 
-export function getRussianTypeLabel(status: ItemStatus, accountType?: AccountType): string {
-  if (status === 'found') {
-    if (accountType === 'channel') return 'канал';
-    if (accountType === 'bot') return 'бот';
-    return 'человек';
+function getRussianTypeLabel(item: JobItem): string {
+  switch (item.status) {
+    case 'found':
+      if (item.accountType === 'channel') return 'канал';
+      if (item.accountType === 'bot') return 'бот';
+      return 'человек';
+    case 'found_no_username':
+      return 'без username';
+    case 'not_found_or_hidden':
+      return 'не найден / скрыт';
+    case 'error':
+      return 'ошибка';
+    default:
+      return 'в очереди';
   }
-  if (status === 'found_no_username') return 'без username';
-  if (status === 'not_found_or_hidden') return 'не найден / скрыт';
-  if (status === 'error') return 'ошибка';
-  return 'в очереди';
+}
+
+function formatJobItemRow(item: JobItem, providerMode: Job['providerMode']): string[] {
+  const username = item.status === 'found' ? item.username : '';
+  const accountType =
+    item.status === 'found' || item.status === 'found_no_username' ? item.accountType : '';
+  const personalUsername = item.status === 'found' ? (item.personalUsername ?? '') : '';
+  const linkedChannel = item.status === 'found' ? (item.linkedChannel ?? '') : '';
+  const checkedAt =
+    item.status === 'pending' || item.status === 'checking' ? '' : (item.checkedAt ?? '');
+
+  return [
+    item.phone,
+    username,
+    accountType,
+    getRussianTypeLabel(item),
+    item.status,
+    personalUsername,
+    linkedChannel,
+    providerMode,
+    checkedAt,
+  ];
 }
 
 export function buildResultCsv(
@@ -72,23 +80,10 @@ export function buildResultCsv(
     'checked_at',
   ];
 
-  const rows = job.items.filter((item) =>
-    onlyFound ? item.status === 'found' && Boolean(item.username) : true
-  );
-
+  const rows = job.items.filter((item) => (onlyFound ? item.status === 'found' : true));
   const lines = [headers.join(delimiter)];
   for (const item of rows) {
-    const fields = [
-      item.phone,
-      item.username ?? '',
-      item.accountType ?? '',
-      getRussianTypeLabel(item.status, item.accountType),
-      item.status,
-      item.personalUsername ?? '',
-      item.linkedChannel ?? '',
-      job.providerMode,
-      item.checkedAt ?? '',
-    ];
+    const fields = formatJobItemRow(item, job.providerMode);
     lines.push(fields.map((f) => escapeCsvField(f, delimiter)).join(delimiter));
   }
 

@@ -22,10 +22,13 @@ import {
   type ImportedTelegramContact,
   type MtprotoClientLike,
 } from '@/lib/providers/mtproto';
-import { computeJobStats } from '@/lib/job-engine';
+import {
+  applyBatchOutcomes,
+  computeJobStats,
+  LIVE_MAX_BATCH_SIZE,
+  LIVE_MIN_PAUSE_MS,
+} from '@/lib/job-engine';
 
-const LIVE_MIN_PAUSE_MS = 15_000;
-const LIVE_MAX_BATCH_SIZE = 15;
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const SESSION_LOCK_TTL_MS = 60_000;
 
@@ -231,28 +234,7 @@ async function main(): Promise<void> {
           continue;
         }
 
-        const checkedAt = new Date().toISOString();
-        for (const item of latest.items) {
-          const outcome = result.items[item.phone];
-          if (!outcome) continue;
-          item.checkedAt = checkedAt;
-          if (outcome.status === 'found') {
-            item.status = 'found';
-            item.username = outcome.username;
-            item.accountType = outcome.accountType;
-            item.personalUsername = outcome.personalUsername;
-            item.linkedChannel = outcome.linkedChannel;
-          } else if (outcome.status === 'found_no_username') {
-            item.status = 'found_no_username';
-            item.accountType = 'person';
-          } else if (outcome.status === 'not_found_or_hidden') {
-            item.status = 'not_found_or_hidden';
-          } else {
-            item.status = 'error';
-            item.errorCode = outcome.errorCode;
-          }
-        }
-
+        latest.items = applyBatchOutcomes(latest.items, result.items, new Date().toISOString());
         latest.stats = computeJobStats(latest.items);
         if (result.floodWaitSeconds && result.floodWaitSeconds > 0) {
           const cooldownTs = Date.now() + result.floodWaitSeconds * 1000;

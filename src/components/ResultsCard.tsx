@@ -15,11 +15,13 @@ export function ResultsCard({ job, filter, onFilterChange }: ResultsCardProps) {
   const progressPct =
     job.stats.total > 0 ? Math.round((job.stats.processed / job.stats.total) * 100) : 0;
 
-  const foundItems = job.items.filter((i) => {
-    if (i.status !== 'found' || !i.username) return false;
-    if (filter === 'all') return true;
-    return i.accountType === filter;
-  });
+  const foundItems = job.items.filter(
+    (i): i is Extract<(typeof job.items)[number], { status: 'found' }> => {
+      if (i.status !== 'found') return false;
+      if (filter === 'all') return true;
+      return i.accountType === filter;
+    }
+  );
 
   const handleCopy = async (username: string) => {
     try {

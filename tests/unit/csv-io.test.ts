@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { decodeCsvBytes, parseCsvBuffer } from '@/lib/csv-parser';
 import { buildResultCsv, sanitizeCsvCell } from '@/lib/csv-exporter';
+import { parseE164Phone } from '@/lib/phone-normalizer';
 import { KAZAN_SAMPLE_CSV_BYTES } from '@/lib/sample-data';
 import type { Job } from '@/lib/types';
 
@@ -98,7 +99,7 @@ describe('csv-exporter', () => {
       items: [
         {
           index: 0,
-          phone: '+79051234567',
+          phone: parseE164Phone('+79051234567')!,
           maskedPhone: '+7 905 •••-45-67',
           status: 'found',
           username: '@beze_cakes_kzn',
@@ -107,7 +108,7 @@ describe('csv-exporter', () => {
         },
         {
           index: 1,
-          phone: '+79631234567',
+          phone: parseE164Phone('+79631234567')!,
           maskedPhone: '+7 963 •••-45-67',
           status: 'found',
           username: '@speakup_kids_kzn',
@@ -118,7 +119,7 @@ describe('csv-exporter', () => {
         },
         {
           index: 2,
-          phone: '+79211234567',
+          phone: parseE164Phone('+79211234567')!,
           maskedPhone: '+7 921 •••-45-67',
           status: 'not_found_or_hidden',
           checkedAt: '2026-11-20T06:00:02.000Z',

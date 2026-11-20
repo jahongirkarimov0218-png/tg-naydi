@@ -22,6 +22,7 @@ import { FileJobStore } from '@/lib/job-store/file-store';
 import { getJobStore, getStorageMode } from '@/lib/job-store';
 import {
   appendUniquePhonesToJob,
+  applyOutcomeToItem,
   computeJobStats,
   createNewJobRecord,
   runSandboxJobStep,
@@ -174,14 +175,11 @@ describe('TG Naydi Domain & Policy Evals (15 real cases)', () => {
     const batch = await provider.lookupBatch(parsed.uniquePhones);
     const items = parsed.uniquePhones.map((phone, index) => {
       const outcome = batch.items[phone];
-      return {
-        index,
-        phone,
-        maskedPhone: maskPhone(phone),
-        status: outcome.status,
-        username: outcome.status === 'found' ? outcome.username : undefined,
-        accountType: outcome.status === 'found' || outcome.status === 'found_no_username' ? outcome.accountType : undefined,
-      };
+      return applyOutcomeToItem(
+        { index, phone, maskedPhone: maskPhone(phone), status: 'pending' },
+        outcome,
+        '2026-11-20T00:00:00Z'
+      );
     });
     const stats = computeJobStats(items);
     expect(stats.foundWithUsername).toBe(
@@ -234,7 +232,11 @@ describe('TG Naydi Domain & Policy Evals (15 real cases)', () => {
       invalidRows: 0,
     });
     appendUniquePhonesToJob(job, ['+79176151010']);
-    job.items[0].status = 'not_found_or_hidden';
+    job.items[0] = applyOutcomeToItem(
+      job.items[0],
+      { status: 'not_found_or_hidden' },
+      ''
+    );
     const csv = buildResultCsv(job, { delimiter: ';', onlyFound: false });
     expect(csv.startsWith('\uFEFF')).toBe(true);
     expect(csv).toContain('не найден / скрыт;not_found_or_hidden;;;SANDBOX;');

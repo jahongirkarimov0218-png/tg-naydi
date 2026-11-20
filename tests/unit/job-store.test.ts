@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FileJobStore } from '@/lib/job-store/file-store';
 import { getJobStore, getStorageMode } from '@/lib/job-store';
+import { parseE164Phone } from '@/lib/phone-normalizer';
 import type { Job } from '@/lib/types';
 
 function makeSampleJob(id: string, overrides: Partial<Job> = {}): Job {
@@ -22,8 +23,8 @@ function makeSampleJob(id: string, overrides: Partial<Job> = {}): Job {
     duplicatesRemoved: 0,
     invalidRows: 0,
     items: [
-      { index: 0, phone: '+79051114567', maskedPhone: '+7 905 •••-45-67', status: 'pending' },
-      { index: 1, phone: '+79632226543', maskedPhone: '+7 963 •••-65-43', status: 'pending' },
+      { index: 0, phone: parseE164Phone('+79051114567')!, maskedPhone: '+7 905 •••-45-67', status: 'pending' },
+      { index: 1, phone: parseE164Phone('+79632226543')!, maskedPhone: '+7 963 •••-65-43', status: 'pending' },
     ],
     stats: {
       total: 2,

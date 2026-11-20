@@ -201,7 +201,7 @@ export function LiveMonitorCard({
               >
                 <div className="col-span-5 font-mono text-slate-200">{item.maskedPhone}</div>
                 <div className="col-span-4 truncate font-mono text-slate-300">
-                  {item.username ? (
+                  {item.status === 'found' ? (
                     <span className="text-white">{item.username}</span>
                   ) : item.status === 'found_no_username' ? (
                     <span className="text-slate-500">без username</span>
