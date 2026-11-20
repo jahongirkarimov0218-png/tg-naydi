@@ -197,9 +197,11 @@ describe('job-store factory selection', () => {
     delete process.env.VERCEL;
     delete process.env.UPSTASH_REDIS_REST_URL;
     delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
   });
 
-  it('requires BOTH Upstash URL and token, otherwise uses FileJobStore locally and fails closed on Vercel', () => {
+  it('requires BOTH Upstash URL and token (or Vercel Marketplace KV_REST_API_*), otherwise uses FileJobStore locally and fails closed on Vercel', () => {
     delete process.env.VERCEL;
     process.env.UPSTASH_REDIS_REST_URL = 'https://example.upstash.io';
     delete process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -215,10 +217,17 @@ describe('job-store factory selection', () => {
     expect(getStorageMode()).toBe('upstash');
     expect(getJobStore()).toBeInstanceOf(UpstashRedisJobStore);
 
-    process.env.VERCEL = '1';
     delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    process.env.VERCEL = '1';
     expect(getStorageMode()).toBe('unconfigured');
     expect(getJobStore()).toBeNull();
+
+    // Vercel Marketplace Upstash for Redis injects KV_REST_API_URL + KV_REST_API_TOKEN
+    process.env.KV_REST_API_URL = 'https://marketplace.upstash.io';
+    process.env.KV_REST_API_TOKEN = 'kv-tok-456';
+    expect(getStorageMode()).toBe('upstash');
+    expect(getJobStore()).toBeInstanceOf(UpstashRedisJobStore);
   });
 });
 

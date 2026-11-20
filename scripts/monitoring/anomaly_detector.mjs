@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Deterministic Maintain-Loop Anomaly Detector (Stage 06 / Playbook Step 11).
  *
