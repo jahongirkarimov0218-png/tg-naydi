@@ -50,7 +50,7 @@ async function run() {
   const healthRes = await fetch(`${BASE_URL}/api/health`, { cache: 'no-store' });
   const health = await healthRes.json();
   assert(healthRes.status === 200, `GET /api/health returned ${healthRes.status}`);
-  assert(health.ok === true, `Health not ok: ${JSON.stringify(health)}`);
+  assert(health.status === 'ok', `Health status not ok: ${JSON.stringify(health)}`);
   assert(
     health.storageMode === 'upstash',
     `Expected storageMode="upstash", got "${health.storageMode}"`
@@ -58,10 +58,10 @@ async function run() {
   record(
     'GET /api/health',
     healthRes.status,
-    `ok=${health.ok}, storageMode=${health.storageMode}, providerMode=${health.providerMode}`
+    `status=${health.status}, storageMode=${health.storageMode}, providerMode=${health.providerMode}, commitSha=${health.commitSha?.slice(0, 7) ?? 'unknown'}`
   );
 
-  // 2. Create job (POST /api/jobs)
+  // 2. Create draft job (POST /api/jobs)
   const testPhones = [
     '+79051114567',
     '+79632226543',
@@ -73,7 +73,6 @@ async function run() {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       fileName: 'smoke-test.csv',
-      phones: testPhones,
       batchSize: 2,
       pauseMs: 100,
       defaultCountry: 'RU',
@@ -97,13 +96,25 @@ async function run() {
 
   const authHeaders = { cookie: cookiePair };
 
+  // 3b. Upload phone chunk (POST /api/jobs/:id/chunks)
+  const chunkRes = await fetch(`${BASE_URL}/api/jobs/${jobId}/chunks`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'content-type': 'application/json' },
+    body: JSON.stringify({ phones: testPhones }),
+  });
+  const chunkJson = await chunkRes.json();
+  assert(chunkRes.status === 200, `POST /chunks returned ${chunkRes.status}: ${JSON.stringify(chunkJson)}`);
+  assert(chunkJson.added === 4, `Expected added=4, got ${chunkJson.added}`);
+  assert(!RAW_E164_RE.test(JSON.stringify(chunkJson)), 'Raw E.164 phone leaked in POST /chunks JSON');
+  record('POST /api/jobs/:id/chunks', chunkRes.status, `added=${chunkJson.added}, total=${chunkJson.totalItems ?? chunkJson.job?.stats?.total}`);
+
   // 4. Start job
   const startRes = await fetch(`${BASE_URL}/api/jobs/${jobId}/start`, {
     method: 'POST',
     headers: authHeaders,
   });
   const startJson = await startRes.json();
-  assert(startRes.status === 200, `POST /start returned ${startRes.status}`);
+  assert(startRes.status === 200, `POST /start returned ${startRes.status}: ${JSON.stringify(startJson)}`);
   assert(startJson.job?.status === 'running', `Expected running, got ${startJson.job?.status}`);
   record('POST /api/jobs/:id/start', startRes.status, `status=${startJson.job.status}`);
 
@@ -175,8 +186,11 @@ async function run() {
     `Export CSV missing UTF-8 BOM [EF BB BF]; got [${bytes[0]}, ${bytes[1]}, ${bytes[2]}]`
   );
   const csvText = new TextDecoder('utf-8').decode(bytes.subarray(3));
-  assert(csvText.includes('phone,username,type,status'), 'CSV header mismatch');
-  record('GET /api/jobs/:id/export', exportRes.status, `UTF-8 BOM [EF BB BF] verified, ${bytes.length} bytes`);
+  assert(
+    csvText.startsWith('phone;username;type;type_label;status;'),
+    `CSV header mismatch: ${csvText.slice(0, 80)}`
+  );
+  record('GET /api/jobs/:id/export', exportRes.status, `UTF-8 BOM [EF BB BF] + Russian Excel ';' header verified, ${bytes.length} bytes`);
 
   // 10. Delete job & verify 404 on subsequent GET
   const delRes = await fetch(`${BASE_URL}/api/jobs/${jobId}`, {
