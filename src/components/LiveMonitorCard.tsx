@@ -2,6 +2,9 @@
 
 import { FileText, Loader2, Pause, Play, Trash2 } from 'lucide-react';
 import type { PublicJobItem, PublicJobView } from '@/lib/types';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/components/ui/cn';
 
 interface LiveMonitorCardProps {
   job: PublicJobView | null;
@@ -22,72 +25,54 @@ const PREVIEW_ROWS: PublicJobItem[] = [
 function StatusDot({ job }: { job: PublicJobView | null }) {
   if (!job) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-400">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
+      <Badge variant="darkNeutral">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-200" />
         проверяем
-      </span>
+      </Badge>
     );
   }
 
   switch (job.status) {
     case 'running':
       return (
-        <span
-          data-testid="job-status-badge"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-400"
-        >
-          <span className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
+        <Badge variant="darkNeutral" data-testid="job-status-badge">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-200" />
           проверяем
-        </span>
+        </Badge>
       );
     case 'queued':
       return (
-        <span
-          data-testid="job-status-badge"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-sky-400"
-        >
-          <span className="h-2 w-2 rounded-full bg-sky-400" />в очереди воркера
-        </span>
+        <Badge variant="darkNeutral" data-testid="job-status-badge">
+          <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />в очереди воркера
+        </Badge>
       );
     case 'paused':
       return (
-        <span
-          data-testid="job-status-badge"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400"
-        >
-          <span className="h-2 w-2 rounded-full bg-amber-400" />
+        <Badge variant="darkAmber" data-testid="job-status-badge">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
           на паузе
-        </span>
+        </Badge>
       );
     case 'rate_limited':
       return (
-        <span
-          data-testid="job-status-badge"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-300"
-        >
-          <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+        <Badge variant="darkAmber" data-testid="job-status-badge" className="tabular-nums">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
           пауза FLOOD_WAIT: {job.retryAfterSec ?? 0}с
-        </span>
+        </Badge>
       );
     case 'completed':
       return (
-        <span
-          data-testid="job-status-badge"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400"
-        >
-          <span className="h-2 w-2 rounded-full bg-emerald-400" />
+        <Badge variant="darkEmerald" data-testid="job-status-badge">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
           готово
-        </span>
+        </Badge>
       );
     default:
       return (
-        <span
-          data-testid="job-status-badge"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400"
-        >
-          <span className="h-2 w-2 rounded-full bg-slate-400" />
+        <Badge variant="darkNeutral" data-testid="job-status-badge">
+          <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
           {job.status}
-        </span>
+        </Badge>
       );
   }
 }
@@ -119,19 +104,21 @@ export function LiveMonitorCard({
   return (
     <div
       data-testid="live-monitor-card"
-      className="rounded-[28px] border border-slate-800 bg-[#111318] p-5 text-slate-100 shadow-xl sm:p-6"
+      className="rounded-xl border border-zinc-800/90 bg-[#09090B] p-4 text-zinc-100 shadow-xs sm:p-6"
     >
-      {/* Header matching ref-02 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/90 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-inner">
-            <FileText className="h-4 w-4" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-100">
+            <FileText className="h-4 w-4" strokeWidth={1.75} />
           </div>
           <div>
-            <div data-testid="monitor-filename" className="text-sm font-semibold text-white">
+            <div
+              data-testid="monitor-filename"
+              className="text-sm font-semibold tracking-tight text-zinc-50"
+            >
               {job ? job.fileName : 'база.csv'}
             </div>
-            <div className="text-[11px] text-slate-400">
+            <div className="text-xs text-zinc-400 tabular-nums">
               {job
                 ? `Обработано ${job.stats.processed} из ${job.stats.total}`
                 : 'Предпросмотр живого монитора'}
@@ -139,97 +126,94 @@ export function LiveMonitorCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <StatusDot job={job} />
           {job && (job.status === 'running' || job.status === 'queued') && (
-            <button
-              type="button"
+            <Button
+              variant="darkSecondary"
+              size="sm"
               data-testid="pause-job-btn"
               onClick={onPause}
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-100 transition hover:bg-slate-700"
             >
-              <Pause className="h-3.5 w-3.5" />
+              <Pause className="h-3.5 w-3.5" strokeWidth={1.75} />
               Пауза
-            </button>
+            </Button>
           )}
           {job && (job.status === 'paused' || job.status === 'rate_limited') && (
-            <button
-              type="button"
+            <Button
+              variant="darkPrimary"
+              size="sm"
               data-testid="resume-job-btn"
               disabled={job.status === 'rate_limited' && (job.retryAfterSec ?? 0) > 0}
               onClick={onResume}
-              className="inline-flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
             >
-              <Play className="h-3.5 w-3.5 fill-current" />
+              <Play className="h-3.5 w-3.5" strokeWidth={1.75} />
               Продолжить
-            </button>
+            </Button>
           )}
           {job && (
-            <button
-              type="button"
+            <Button
+              variant="darkDestructive"
+              size="sm"
               data-testid="delete-job-btn"
               onClick={onDelete}
               title="Удалить загруженную базу и результаты немедленно"
-              className="inline-flex items-center gap-1 rounded-xl border border-red-900/60 bg-red-950/40 px-2.5 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-900/50"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
               Удалить
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
-      {/* Table matching ref-02 */}
-      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-800/90 bg-[#171A21]">
-        <div className="grid grid-cols-12 border-b border-slate-800/80 px-4 py-2.5 text-[11px] font-medium text-slate-400">
+      <div className="mt-4 overflow-hidden rounded-lg border border-zinc-800/90 bg-[#111113]">
+        <div className="grid grid-cols-12 border-b border-zinc-800/80 bg-zinc-900/40 px-3 py-2.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500 sm:px-4">
           <div className="col-span-5">Телефон</div>
           <div className="col-span-4">Telegram</div>
           <div className="col-span-3 text-right">Тип</div>
         </div>
 
-        <div className="max-h-[300px] divide-y divide-slate-800/70 overflow-y-auto">
+        <div className="max-h-[300px] divide-y divide-zinc-800/70 overflow-y-auto">
           {rows.map((item, idx) => {
             const isActive = idx === activeIdx && (isStepping || !job || job.status === 'running');
             return (
               <div
                 key={item.index}
-                className={`grid grid-cols-12 items-center px-4 py-3 text-xs transition ${
-                  isActive
-                    ? 'bg-gradient-to-r from-blue-950/60 via-slate-800/40 to-transparent'
-                    : ''
-                }`}
+                className={cn(
+                  'relative grid grid-cols-12 items-center gap-1 px-3 py-2.5 text-xs transition-colors duration-150 sm:px-4 sm:py-3',
+                  isActive &&
+                    'bg-zinc-900/90 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-zinc-200'
+                )}
               >
-                <div className="col-span-5 font-mono text-slate-200">{item.maskedPhone}</div>
-                <div className="col-span-4 truncate font-mono text-slate-300">
+                <div className="col-span-5 font-mono text-[11px] whitespace-nowrap text-zinc-200 tabular-nums sm:text-xs">
+                  {item.maskedPhone}
+                </div>
+                <div className="col-span-4 truncate font-mono text-[11px] text-zinc-300 tabular-nums sm:text-xs">
                   {item.status === 'found' ? (
-                    <span className="text-white">{item.username}</span>
+                    <span className="text-zinc-50">{item.username}</span>
                   ) : item.status === 'found_no_username' ? (
-                    <span className="text-slate-500">без username</span>
+                    <span className="text-zinc-500">без username</span>
                   ) : item.status === 'not_found_or_hidden' ? (
-                    <span className="text-slate-500">—</span>
+                    <span className="text-zinc-500">—</span>
                   ) : (
-                    <span className="text-slate-600">···</span>
+                    <span className="text-zinc-600">···</span>
                   )}
                 </div>
                 <div className="col-span-3 flex justify-end">
                   {isActive ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-300" strokeWidth={1.75} />
                   ) : item.status === 'found' && item.accountType === 'channel' ? (
-                    <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-300">
-                      канал
-                    </span>
+                    <Badge variant="darkAmber">канал</Badge>
                   ) : item.status === 'found' && item.accountType === 'bot' ? (
-                    <span className="rounded-md bg-purple-500/15 px-2 py-0.5 text-[11px] font-medium text-purple-300">
-                      бот
-                    </span>
+                    <Badge variant="darkViolet">бот</Badge>
                   ) : item.status === 'found' ? (
-                    <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-300">
-                      человек
-                    </span>
+                    <Badge variant="darkEmerald">человек</Badge>
                   ) : item.status === 'not_found_or_hidden' ? (
-                    <span className="text-[11px] text-slate-500">не найден / скрыт</span>
+                    <span className="text-right text-[11px] leading-tight text-zinc-500">
+                      не найден / скрыт
+                    </span>
                   ) : (
-                    <span className="text-[11px] text-slate-600">ожидает</span>
+                    <span className="text-[11px] text-zinc-600">ожидает</span>
                   )}
                 </div>
               </div>
@@ -239,7 +223,7 @@ export function LiveMonitorCard({
       </div>
 
       {job && job.totalItems > rows.length && (
-        <p className="mt-2.5 text-right text-[11px] text-slate-500">
+        <p className="mt-3 text-right text-[11px] text-zinc-500 tabular-nums">
           Показано {rows.length} из {job.totalItems} номеров — все строки доступны в result.csv
         </p>
       )}

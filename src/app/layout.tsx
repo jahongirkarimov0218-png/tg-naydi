@@ -10,7 +10,7 @@ const inter = Inter({
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin', 'cyrillic'],
-  variable: '--font-mono',
+  variable: '--font-jetbrains-mono',
   display: 'swap',
 });
 
@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="min-h-screen bg-[#F5F7FA] font-sans text-[#0F172A] antialiased selection:bg-blue-100 selection:text-blue-900">
+      <body className="min-h-screen bg-background font-sans text-foreground antialiased selection:bg-zinc-900 selection:text-zinc-50">
         {children}
       </body>
     </html>
