@@ -7,6 +7,14 @@ export default defineConfig({
     globals: true,
     include: ['tests/unit/**/*.test.ts', 'tests/integration/**/*.test.ts', 'evals/**/*.test.ts'],
     testTimeout: 20000,
+    coverage: {
+      provider: 'v8',
+      all: true,
+      include: ['src/lib/**/*.ts', 'src/app/api/**/*.ts', 'worker/**/*.ts'],
+      exclude: ['**/*.d.ts', '**/types.ts'],
+      reporter: ['text', 'json', 'json-summary'],
+      reportsDirectory: './coverage',
+    },
   },
   resolve: {
     alias: {
