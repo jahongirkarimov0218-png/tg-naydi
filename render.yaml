@@ -1,0 +1,31 @@
+# Render Blueprint for TG Naydi 24/7 Standalone MTProto Worker
+# Free tier note: 1 Free Web Service uses up to 744h/month (within 750 free hours/month).
+# Keep-alive: ping GET /healthz every 10-14 minutes via cron-job.org to prevent 15m idle spin-down.
+# Single-instance rule: NEVER run local `pnpm run worker:mtproto` simultaneously with this service
+# using the same TELEGRAM_SESSION (prevents Telegram AUTH_KEY_DUPLICATED session revocation).
+
+services:
+  - type: web
+    name: tg-naydi-worker
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm run worker:mtproto
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WORKER_IDLE_POLL_MS
+        value: "15000"
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: TELEGRAM_SESSION
+        sync: false

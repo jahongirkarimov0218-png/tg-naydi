@@ -1,5 +1,6 @@
 import { getProviderMode } from '@/lib/auth';
 import { getJobStore, getStorageMode } from '@/lib/job-store';
+import { isWorkerHeartbeatFresh } from '@/lib/job-store/helpers';
 import { TgNaydiWorkspace } from '@/components/TgNaydiWorkspace';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +14,7 @@ export default async function HomePage() {
   if (store && providerMode === 'LIVE_MTPROTO') {
     try {
       const hb = await store.getWorkerHeartbeat();
-      workerOnline = hb !== null && Date.now() - hb < 45_000;
+      workerOnline = isWorkerHeartbeatFresh(hb);
     } catch {
       workerOnline = false;
     }

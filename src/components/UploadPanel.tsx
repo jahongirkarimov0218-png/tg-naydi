@@ -103,15 +103,8 @@ export function UploadPanel({
           data-testid="validation-summary"
           className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-3.5"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-            <span>
-              Кодировка: <strong className="text-slate-800">{parsed.encoding}</strong> ·
-              Разделитель:{' '}
-              <strong className="text-slate-800">
-                {parsed.delimiter === '\n' ? 'построчно' : `«${parsed.delimiter}»`}
-              </strong>
-            </span>
-            {parsed.headers.length > 1 && (
+          {parsed.headers.length > 1 && (
+            <div className="mb-3 flex flex-wrap items-center justify-end gap-2 text-xs text-slate-500">
               <label className="inline-flex items-center gap-1.5">
                 <span>Колонка:</span>
                 <select
@@ -126,10 +119,10 @@ export function UploadPanel({
                   ))}
                 </select>
               </label>
-            )}
-          </div>
+            </div>
+          )}
 
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-xl bg-white p-2.5 text-center ring-1 ring-slate-200/70">
               <div className="text-base font-bold text-slate-900">{parsed.totalRows}</div>
               <div className="text-[11px] text-slate-500">всего строк</div>

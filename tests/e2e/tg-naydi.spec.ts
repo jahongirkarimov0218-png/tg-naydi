@@ -42,9 +42,13 @@ test.describe('TG Naydi End-to-End Browser Verification', () => {
 
     await page.getByTestId('csv-file-input').setInputFiles(tmpFile);
 
-    // Verify client-side CP1251 decoding and deduplication summary
+    // Verify client-side CP1251 decoding (Cyrillic header in column selector) and deduplication summary,
+    // while encoding/delimiter metadata line is removed from UI
     const summary = page.getByTestId('validation-summary');
-    await expect(summary).toContainText('windows-1251');
+    await expect(summary).not.toContainText('Кодировка');
+    await expect(summary).not.toContainText('Разделитель');
+    await expect(summary).toContainText('Колонка:');
+    await expect(summary).toContainText('Телефон');
     await expect(summary).toContainText('10'); // 10 unique valid phones (12 rows - 1 dup - 1 invalid)
 
     // Start check
@@ -138,5 +142,25 @@ test.describe('TG Naydi End-to-End Browser Verification', () => {
     const screenshotPath = path.join(process.cwd(), '.data', 'e2e-visual-snapshot.png');
     await fs.mkdir(path.dirname(screenshotPath), { recursive: true });
     await page.screenshot({ path: screenshotPath, fullPage: true });
+  });
+
+  test('renders clean validation summary without encoding/delimiter line for single-column CSV', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const singleColCsv = ['phone', '+998901234567', '+998901234568'].join('\n');
+    const tmpFile = path.join(process.cwd(), '.data', 'e2e-single-col.csv');
+    await fs.mkdir(path.dirname(tmpFile), { recursive: true });
+    await fs.writeFile(tmpFile, singleColCsv, 'utf-8');
+
+    await page.getByTestId('csv-file-input').setInputFiles(tmpFile);
+    const summary = page.getByTestId('validation-summary');
+    await expect(summary).toBeVisible();
+    await expect(summary).not.toContainText('Кодировка');
+    await expect(summary).not.toContainText('Разделитель');
+    await expect(summary).not.toContainText('Колонка:');
+    // Only the stats grid child should exist — no empty header wrapper
+    await expect(summary.locator(':scope > div')).toHaveCount(1);
+    await expect(summary).toContainText('2');
   });
 });

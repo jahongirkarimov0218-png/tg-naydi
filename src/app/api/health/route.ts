@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getProviderMode } from '@/lib/auth';
 import { getJobStore, getStorageMode } from '@/lib/job-store';
+import { isWorkerHeartbeatFresh } from '@/lib/job-store/helpers';
 import type { RecentJobMetrics } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -41,7 +42,7 @@ export async function GET(): Promise<NextResponse> {
       store.getWorkerHeartbeat(),
       store.getRecentMetrics(),
     ]);
-    const workerOnline = hb !== null && Date.now() - hb < 45_000;
+    const workerOnline = isWorkerHeartbeatFresh(hb);
     return NextResponse.json({ ...base, status: 'ok', workerOnline, metrics });
   } catch {
     return NextResponse.json(
